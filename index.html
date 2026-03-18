@@ -151,24 +151,25 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
   <div class="card">
     <div class="card-title">Nouvelle session</div>
     <div class="card-sub">Renseignez les informations de votre formation</div>
-    <div class="field-label">Votre nom (formateur) *</div>
-    <input class="f" id="ns-formateur" placeholder="Prénom Nom"/>
-    <div class="field-label">Intitulé de la formation *</div>
-    <input class="f" id="ns-intitule" placeholder="Ex : Marée, Management..."/>
+    <div style="font-size:11px;color:#e55;margin-bottom:10px;">* Tous les champs sont obligatoires</div>
+    <div class="field-label">Votre nom (formateur)</div>
+    <input class="f" id="ns-formateur" placeholder="Prénom Nom" required/>
+    <div class="field-label">Intitulé de la formation</div>
+    <input class="f" id="ns-intitule" placeholder="Ex : Marée, Management..." required/>
     <div class="field-label">Client / Entreprise</div>
-    <input class="f" id="ns-client" placeholder="Nom de l'entreprise"/>
+    <input class="f" id="ns-client" placeholder="Nom de l'entreprise" required/>
     <div class="field-label">Convention</div>
-    <input class="f" id="ns-convention" placeholder="Ex : FOR260023"/>
+    <input class="f" id="ns-convention" placeholder="Ex : FOR260023" required/>
     <div class="field-label">Lieu</div>
-    <input class="f" id="ns-lieu" placeholder="Ex : Salle A, Site client..."/>
+    <input class="f" id="ns-lieu" placeholder="Ex : Salle A, Site client..." required/>
     <div class="field-label">Date</div>
-    <input class="f" type="date" id="ns-date"/>
+    <input class="f" type="date" id="ns-date" required/>
     <div class="field-label">Durée</div>
-    <input class="f" id="ns-duree" placeholder="Ex : 7h, 3h30..."/>
+    <input class="f" id="ns-duree" placeholder="Ex : 7h, 3h30..." required/>
     <div class="field-label">Horaire matin</div>
-    <input class="f" id="ns-matin" value="9h-12h30"/>
+    <input class="f" id="ns-matin" value="9h-12h30" required/>
     <div class="field-label">Horaire après-midi</div>
-    <input class="f" id="ns-apmidi" value="13h30-17h"/>
+    <input class="f" id="ns-apmidi" value="13h30-17h" required/>
     <button class="btn-primary" id="btn-creer" onclick="creerSession()">Créer ma session</button>
     <button class="btn-sm" style="width:100%;margin-top:8px;" onclick="showScreen('screen-accueil')">Annuler</button>
   </div>
@@ -227,9 +228,16 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
       <span id="stag-details">—</span>
     </div>
     <div class="field-label">Votre nom et prénom</div>
-    <input class="f" id="stag-nom" placeholder="Nom Prénom" style="margin-bottom:1rem;font-size:15px;"/>
+    <input class="f" id="stag-nom" placeholder="Nom Prénom" style="margin-bottom:0.5rem;font-size:15px;" inputmode="text" enterkeyhint="done" onkeydown="if(event.key==='Enter'){this.blur();document.getElementById('stag-nom-valide').style.display='flex';}"/>
+    <button id="stag-nom-valide" onclick="validerNomStagiaire()" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:10px;border:none;border-radius:8px;background:#1a3a6b;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;font-family:Arial;margin-bottom:1rem;">Confirmer mon nom ✓</button>
+
+    <!-- NOM CONFIRME -->
+    <div id="nom-confirme" style="display:none;align-items:center;gap:8px;background:#d4edda;border-radius:8px;padding:8px 12px;margin-bottom:1rem;font-size:13px;color:#1a6b35;">
+      <span>✓</span><span id="nom-confirme-text"></span><button onclick="modifierNom()" style="margin-left:auto;background:none;border:none;font-size:11px;color:#888;cursor:pointer;text-decoration:underline;">Modifier</button>
+    </div>
 
     <!-- ONGLETS DEMI-JOURNEES -->
+    <div id="demi-section" style="display:none;">
     <div class="demi-tabs">
       <div class="demi-tab active" id="tab-matin" onclick="setDemiTab('matin')">Matin<br><small id="label-matin" style="font-weight:normal;font-size:10px;">9h-12h30</small></div>
       <div class="demi-tab" id="tab-apmidi" onclick="setDemiTab('apmidi')">Après-midi<br><small id="label-apmidi" style="font-weight:normal;font-size:10px;">13h30-17h</small></div>
@@ -258,6 +266,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
         <button class="btn-valider" id="btn-val-apmidi" onclick="validerDemi('apmidi')">Valider signature après-midi ✓</button>
       </div>
     </div>
+    </div><!-- fin demi-section -->
   </div>
   <div class="success-page" id="stag-success">
     <div class="success-icon">✅</div>
@@ -394,18 +403,28 @@ window.supprimerSession = async function(id, nom) {
 window.creerSession = async function() {
   const formateur = document.getElementById('ns-formateur').value.trim();
   const intitule = document.getElementById('ns-intitule').value.trim();
-  if (!formateur || !intitule) { alert('Le nom du formateur et l\'intitulé sont obligatoires.'); return; }
+  const client = document.getElementById('ns-client').value.trim();
+  const convention = document.getElementById('ns-convention').value.trim();
+  const lieu = document.getElementById('ns-lieu').value.trim();
+  const date = document.getElementById('ns-date').value;
+  const duree = document.getElementById('ns-duree').value.trim();
+  const matin = document.getElementById('ns-matin').value.trim();
+  const apmidi = document.getElementById('ns-apmidi').value.trim();
+  const manquants = [];
+  if (!formateur) manquants.push('Votre nom');
+  if (!intitule) manquants.push('Intitulé de la formation');
+  if (!client) manquants.push('Client / Entreprise');
+  if (!convention) manquants.push('Convention');
+  if (!lieu) manquants.push('Lieu');
+  if (!date) manquants.push('Date');
+  if (!duree) manquants.push('Durée');
+  if (!matin) manquants.push('Horaire matin');
+  if (!apmidi) manquants.push('Horaire après-midi');
+  if (manquants.length > 0) { alert('Champs obligatoires manquants :\n\n• ' + manquants.join('\n• ')); return; }
   const btn = document.getElementById('btn-creer');
   btn.disabled = true; btn.textContent = 'Création...';
   const session = {
-    formateur, intitule,
-    client: document.getElementById('ns-client').value.trim(),
-    convention: document.getElementById('ns-convention').value.trim(),
-    lieu: document.getElementById('ns-lieu').value.trim(),
-    date: document.getElementById('ns-date').value || new Date().toISOString().split('T')[0],
-    duree: document.getElementById('ns-duree').value.trim(),
-    matin: document.getElementById('ns-matin').value,
-    apmidi: document.getElementById('ns-apmidi').value,
+    formateur, intitule, client, convention, lieu, date, duree, matin, apmidi,
     sigCount: 0,
     createdAt: new Date().toISOString()
   };
@@ -627,9 +646,30 @@ async function checkMode() {
   document.getElementById('label-apmidi').textContent = s.apmidi || '13h30-17h';
   document.getElementById('stag-loading').style.display = 'none';
   document.getElementById('stag-form').style.display = 'block';
+  document.getElementById('demi-section').style.display = 'none';
   window.setDemiTab('matin');
   setTimeout(() => initSig('sig-matin'), 100);
 }
+
+window.validerNomStagiaire = function() {
+  const nom = document.getElementById('stag-nom').value.trim();
+  if (!nom) { alert('Veuillez saisir votre nom et prénom.'); return; }
+  document.getElementById('stag-nom').blur();
+  document.getElementById('stag-nom').readOnly = true;
+  document.getElementById('stag-nom-valide').style.display = 'none';
+  document.getElementById('nom-confirme-text').textContent = nom;
+  document.getElementById('nom-confirme').style.display = 'flex';
+  document.getElementById('demi-section').style.display = 'block';
+  setTimeout(() => initSig('sig-matin'), 100);
+};
+
+window.modifierNom = function() {
+  document.getElementById('stag-nom').readOnly = false;
+  document.getElementById('stag-nom').focus();
+  document.getElementById('stag-nom-valide').style.display = 'flex';
+  document.getElementById('nom-confirme').style.display = 'none';
+  document.getElementById('demi-section').style.display = 'none';
+};
 
 checkMode();
 </script>
