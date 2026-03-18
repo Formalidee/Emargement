@@ -83,6 +83,14 @@ canvas.sig-c{display:block;width:100%;height:160px;cursor:crosshair;touch-action
 .error-sub{font-size:13px;color:#888;}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2a9d5c;margin-right:5px;animation:pulse 1.5s infinite;}
 @keyframes pulse{0%{opacity:1;}50%{opacity:0.4;}100%{opacity:1;}}
+.session-card{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:1rem;margin-bottom:10px;}
+.session-card-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;}
+.session-card-title{font-weight:bold;font-size:14px;color:#111;}
+.session-card-meta{font-size:11px;color:#888;margin-top:2px;}
+.session-card-actions{display:flex;gap:6px;margin-top:8px;}
+.tabs-accueil{display:flex;gap:6px;margin-bottom:1rem;}
+.tab-a{flex:1;padding:8px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:12px;font-weight:bold;cursor:pointer;text-align:center;color:#555;font-family:Arial;}
+.tab-a.active{background:#e8f0fe;color:#1a56db;border-color:#93b4f5;}
 @media print{
   .topbar,.btn-sm,.btn-new,.btn-primary,.qr-box{display:none!important;}
   body{background:#fff;}
@@ -98,7 +106,11 @@ canvas.sig-c{display:block;width:100%;height:160px;cursor:crosshair;touch-action
   <div class="card">
     <div class="card-title">Feuille d'émargement</div>
     <div class="card-sub" id="accueil-date">Chargement...</div>
-    <div class="session-list" id="session-list"></div>
+    <div class="tabs-accueil">
+      <div class="tab-a active" id="tab-aujourd-hui" onclick="setAccueilTab('today')">Aujourd'hui</div>
+      <div class="tab-a" id="tab-toutes" onclick="setAccueilTab('all')">Toutes les sessions</div>
+    </div>
+    <div id="session-list"></div>
     <button class="btn-new" onclick="showScreen('screen-nouvelle-session')">+ Créer une nouvelle session</button>
   </div>
 </div>
@@ -245,27 +257,60 @@ function showScreen(id) {
 window.showScreen = showScreen;
 
 // ===== ACCUEIL =====
+let accueilTab = 'today';
+
+window.setAccueilTab = function(tab) {
+  accueilTab = tab;
+  document.getElementById('tab-aujourd-hui').className = 'tab-a' + (tab === 'today' ? ' active' : '');
+  document.getElementById('tab-toutes').className = 'tab-a' + (tab === 'all' ? ' active' : '');
+  loadSessions();
+};
+
 async function loadTodaySessions() {
+  loadSessions();
+}
+
+async function loadSessions() {
   const today = new Date().toISOString().split('T')[0];
-  document.getElementById('accueil-date').textContent = 'Sessions du ' + formatDate(today);
+  document.getElementById('accueil-date').textContent = accueilTab === 'today' ? 'Sessions du ' + formatDate(today) : 'Toutes les sessions';
   const list = document.getElementById('session-list');
   list.innerHTML = '<div class="loading">Chargement...</div>';
   const snap = await get(ref(db, 'sessions'));
-  if (!snap.exists()) { list.innerHTML = '<div style="font-size:12px;color:#aaa;text-align:center;padding:1rem;">Aucune session aujourd\'hui.<br>Créez-en une pour commencer.</div>'; return; }
+  if (!snap.exists()) {
+    list.innerHTML = '<div style="font-size:12px;color:#aaa;text-align:center;padding:1rem;">Aucune session.<br>Créez-en une pour commencer.</div>';
+    return;
+  }
   const sessions = [];
   snap.forEach(child => {
     const s = child.val();
-    if (s.date === today) sessions.push({ id: child.key, ...s });
+    if (accueilTab === 'today' && s.date !== today) return;
+    sessions.push({ id: child.key, ...s });
   });
-  if (sessions.length === 0) { list.innerHTML = '<div style="font-size:12px;color:#aaa;text-align:center;padding:1rem;">Aucune session aujourd\'hui.<br>Créez-en une pour commencer.</div>'; return; }
+  if (sessions.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:#aaa;text-align:center;padding:1rem;">' + (accueilTab === 'today' ? 'Aucune session aujourd\'hui.<br>Créez-en une pour commencer.' : 'Aucune session enregistrée.') + '</div>';
+    return;
+  }
   sessions.sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
   list.innerHTML = sessions.map(s =>
-    '<div class="session-item" onclick="ouvrirSession(\'' + s.id + '\')">' +
-    '<div><div class="session-name">' + s.intitule + '</div>' +
-    '<div class="session-meta">' + s.formateur + (s.client ? ' · ' + s.client : '') + '</div></div>' +
-    '<span class="session-count">' + (s.sigCount || 0) + ' sig.</span></div>'
+    '<div class="session-card">' +
+    '<div class="session-card-header">' +
+    '<div><div class="session-card-title">' + s.intitule + '</div>' +
+    '<div class="session-card-meta">' + s.formateur + (s.client ? ' · ' + s.client : '') + ' · ' + formatDate(s.date) + '</div></div>' +
+    '<span class="session-count">' + (s.sigCount || 0) + ' sig.</span>' +
+    '</div>' +
+    '<div class="session-card-actions">' +
+    '<button class="btn-sm primary" style="flex:1;" onclick="ouvrirSession(\'' + s.id + '\')">Ouvrir</button>' +
+    '<button class="btn-sm danger" onclick="supprimerSession(\'' + s.id + '\', \'' + s.intitule.replace(/'/g, '') + '\')">Supprimer</button>' +
+    '</div></div>'
   ).join('');
 }
+
+window.supprimerSession = async function(id, nom) {
+  if (!confirm('Supprimer la session "' + nom + '" et toutes ses signatures ?')) return;
+  await remove(ref(db, 'sessions/' + id));
+  await remove(ref(db, 'signatures/' + id));
+  loadSessions();
+};
 
 // ===== CREER SESSION =====
 window.creerSession = async function() {
