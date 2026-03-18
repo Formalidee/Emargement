@@ -437,4 +437,202 @@ function generateQR(sessionId) {
   el.innerHTML = '';
   const url = window.location.href.split('?')[0] + '?session=' + sessionId;
   if (typeof QRCode !== 'undefined') {
-    new QRCode(el, { t
+    new QRCode(el, { text: url, width: 180, height: 180, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  }
+}
+
+// ===== SIGNATURES TEMPS REEL =====
+function listenSignatures(sessionId) {
+  if (signaturesListener) signaturesListener();
+  signaturesListener = onValue(ref(db, 'signatures/' + sessionId), snap => {
+    const sigs = [];
+    if (snap.exists()) snap.forEach(child => sigs.push(child.val()));
+    document.getElementById('count-signed').textContent = sigs.length;
+    document.getElementById('sig-list-title').textContent = 'Signatures reçues (' + sigs.length + ')';
+    const list = document.getElementById('sig-list-formateur');
+    if (sigs.length === 0) { list.innerHTML = '<div class="empty-sigs">En attente des signatures...</div>'; return; }
+    sigs.sort((a,b) => (a.nom||'').localeCompare(b.nom||''));
+    list.innerHTML = sigs.map(sig => {
+      const badge = sig.sigMatin && sig.sigApmidi
+        ? '<span class="badge-ok">✓ Complet</span>'
+        : '<span class="badge-half">⏳ Partiel</span>';
+      return '<div class="sig-row">' +
+        '<div style="flex:1;min-width:0;"><div class="sig-name">' + sig.nom + '</div><div class="sig-meta">' + badge + '</div></div>' +
+        '<div class="sig-thumbs">' +
+        '<div class="sig-thumb-wrap">' + (sig.sigMatin ? '<img class="sig-thumb" src="' + sig.sigMatin + '"/>' : '<div class="sig-no" style="width:70px;height:30px;border:1px dashed #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;">Matin</div>') + '<div class="sig-thumb-label">Matin</div></div>' +
+        '<div class="sig-thumb-wrap">' + (sig.sigApmidi ? '<img class="sig-thumb" src="' + sig.sigApmidi + '"/>' : '<div class="sig-no" style="width:70px;height:30px;border:1px dashed #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;">AM</div>') + '<div class="sig-thumb-label">Après-midi</div></div>' +
+        '</div></div>';
+    }).join('');
+    set(ref(db, 'sessions/' + sessionId + '/sigCount'), sigs.length);
+  });
+}
+
+window.confirmerReset = async function() {
+  if (!confirm('Effacer toutes les signatures de cette session ?')) return;
+  await remove(ref(db, 'signatures/' + currentSessionId));
+};
+
+// ===== EXPORT PDF =====
+window.exportPDF = async function() {
+  const snap = await get(ref(db, 'signatures/' + currentSessionId));
+  const s = currentSessionData;
+  const sigs = [];
+  if (snap.exists()) snap.forEach(child => sigs.push(child.val()));
+  sigs.sort((a,b) => (a.nom||'').localeCompare(b.nom||''));
+
+  // Remplir l'en-tête
+  document.getElementById('pv-meta').innerHTML = [
+    ['Convention', s.convention || '—'],
+    ['Client', s.client || '—'],
+    ['Lieu', s.lieu || '—'],
+    ['Intitulé de la formation', s.intitule],
+    ['Formateur', s.formateur],
+    ['Date', formatDate(s.date)],
+    ['Durée', s.duree || '—'],
+    ['Horaire matin', s.matin || '—'],
+    ['Horaire après-midi', s.apmidi || '—'],
+  ].map(([label, val]) =>
+    '<div class="pv-meta-item"><div class="pv-meta-label">' + label + '</div><div class="pv-meta-value">' + val + '</div></div>'
+  ).join('');
+
+  document.getElementById('pv-horaire-matin').textContent = s.matin || '';
+  document.getElementById('pv-horaire-apmidi').textContent = s.apmidi || '';
+
+  // Remplir le tableau des stagiaires
+  const empty = Array.from({length: Math.max(0, 12 - sigs.length)}, (_,i) => null);
+  const allRows = [...sigs, ...empty];
+  document.getElementById('pv-tbody').innerHTML = allRows.map((sig, i) =>
+    '<tr>' +
+    '<td class="num">' + (i+1) + '</td>' +
+    '<td class="name">' + (sig ? sig.nom : '') + '</td>' +
+    '<td class="sig-cell">' + (sig && sig.sigMatin ? '<img class="pv-sig-img" src="' + sig.sigMatin + '"/>' : '<div class="pv-no-sig"></div>') + '</td>' +
+    '<td class="sig-cell">' + (sig && sig.sigApmidi ? '<img class="pv-sig-img" src="' + sig.sigApmidi + '"/>' : '<div class="pv-no-sig"></div>') + '</td>' +
+    '</tr>'
+  ).join('');
+
+  window.print();
+};
+
+// ===== VUE STAGIAIRE =====
+var drawings = {};
+
+function initSig(id) {
+  const c = document.getElementById(id);
+  if (!c || c._init) return;
+  c._init = true;
+  const ctx = c.getContext('2d');
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  drawings[id] = { drawing: false, lx: 0, ly: 0 };
+  function pos(e) { const r=c.getBoundingClientRect(); const s=e.touches?e.touches[0]:e; return [(s.clientX-r.left)*(c.width/r.width),(s.clientY-r.top)*(c.height/r.height)]; }
+  c.addEventListener('mousedown', e => { drawings[id].drawing=true; const p=pos(e); drawings[id].lx=p[0]; drawings[id].ly=p[1]; });
+  c.addEventListener('mousemove', e => { if(!drawings[id].drawing)return; const p=pos(e); ctx.beginPath();ctx.moveTo(drawings[id].lx,drawings[id].ly);ctx.lineTo(p[0],p[1]);ctx.stroke();drawings[id].lx=p[0];drawings[id].ly=p[1]; });
+  c.addEventListener('mouseup', ()=>{ drawings[id].drawing=false; });
+  c.addEventListener('mouseleave', ()=>{ drawings[id].drawing=false; });
+  c.addEventListener('touchstart', e=>{ e.preventDefault(); drawings[id].drawing=true; const p=pos(e); drawings[id].lx=p[0]; drawings[id].ly=p[1]; },{passive:false});
+  c.addEventListener('touchmove', e=>{ e.preventDefault(); if(!drawings[id].drawing)return; const p=pos(e); ctx.beginPath();ctx.moveTo(drawings[id].lx,drawings[id].ly);ctx.lineTo(p[0],p[1]);ctx.stroke();drawings[id].lx=p[0];drawings[id].ly=p[1]; },{passive:false});
+  c.addEventListener('touchend', ()=>{ drawings[id].drawing=false; });
+}
+
+window.clearSig = function(id) {
+  const c = document.getElementById(id);
+  if (c) { c.getContext('2d').clearRect(0,0,c.width,c.height); if(drawings[id]) drawings[id].drawing=false; }
+};
+
+window.setDemiTab = function(tab) {
+  document.getElementById('zone-matin').style.display = tab === 'matin' ? 'block' : 'none';
+  document.getElementById('zone-apmidi').style.display = tab === 'apmidi' ? 'block' : 'none';
+  document.getElementById('tab-matin').className = 'demi-tab' + (tab === 'matin' ? ' active' : '') + (signesParDemi.matin ? ' done' : '');
+  document.getElementById('tab-apmidi').className = 'demi-tab' + (tab === 'apmidi' ? ' active' : '') + (signesParDemi.apmidi ? ' done' : '');
+  if (tab === 'apmidi') setTimeout(() => initSig('sig-apmidi'), 80);
+};
+
+window.validerDemi = async function(demi) {
+  const nom = document.getElementById('stag-nom').value.trim();
+  if (!nom) { alert('Veuillez saisir votre nom et prénom.'); return; }
+  const canvasId = demi === 'matin' ? 'sig-matin' : 'sig-apmidi';
+  const c = document.getElementById(canvasId);
+  const px = c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+  let hasSig = false;
+  for (let i=3;i<px.length;i+=4){if(px[i]>10){hasSig=true;break;}}
+  if (!hasSig) { alert('Veuillez tracer votre signature.'); return; }
+
+  const btnId = demi === 'matin' ? 'btn-val-matin' : 'btn-val-apmidi';
+  const btn = document.getElementById(btnId);
+  btn.disabled = true; btn.textContent = 'Enregistrement...';
+
+  const sigImg = c.toDataURL('image/png');
+  const now = new Date();
+  const time = now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+
+  // Chercher si le stagiaire a déjà une entrée
+  const snap = await get(ref(db, 'signatures/' + currentSessionId));
+  let existingKey = null;
+  let existingData = {};
+  if (snap.exists()) {
+    snap.forEach(child => {
+      if (child.val().nom === nom) { existingKey = child.key; existingData = child.val(); }
+    });
+  }
+
+  if (existingKey) {
+    existingData[demi === 'matin' ? 'sigMatin' : 'sigApmidi'] = sigImg;
+    existingData[demi === 'matin' ? 'timeMatin' : 'timeApmidi'] = time;
+    await set(ref(db, 'signatures/' + currentSessionId + '/' + existingKey), existingData);
+  } else {
+    const newSig = { nom, createdAt: now.toISOString() };
+    newSig[demi === 'matin' ? 'sigMatin' : 'sigApmidi'] = sigImg;
+    newSig[demi === 'matin' ? 'timeMatin' : 'timeApmidi'] = time;
+    await push(ref(db, 'signatures/' + currentSessionId), newSig);
+  }
+
+  signesParDemi[demi] = true;
+  document.getElementById('form-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'none';
+  document.getElementById('success-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'block';
+  document.getElementById('tab-' + (demi === 'matin' ? 'matin' : 'apmidi')).className = 'demi-tab done';
+  btn.disabled = false;
+
+  if (signesParDemi.matin && signesParDemi.apmidi) {
+    setTimeout(() => {
+      document.getElementById('stag-form').style.display = 'none';
+      document.getElementById('stag-success').style.display = 'block';
+    }, 1000);
+  } else if (demi === 'matin') {
+    setTimeout(() => window.setDemiTab('apmidi'), 1200);
+  }
+};
+
+// ===== DETECTION MODE STAGIAIRE =====
+async function checkMode() {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session');
+  if (!sessionId) {
+    document.getElementById('ns-date').value = new Date().toISOString().split('T')[0];
+    loadSessions();
+    return;
+  }
+  currentSessionId = sessionId;
+  signesParDemi = { matin: false, apmidi: false };
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('view-stagiaire').style.display = 'block';
+  const snap = await get(ref(db, 'sessions/' + sessionId));
+  if (!snap.exists()) {
+    document.getElementById('stag-loading').style.display = 'none';
+    document.getElementById('stag-error').style.display = 'block';
+    return;
+  }
+  const s = snap.val();
+  document.getElementById('stag-intitule').textContent = s.intitule;
+  document.getElementById('stag-details').textContent = s.formateur + (s.client ? ' · ' + s.client : '') + ' · ' + formatDate(s.date);
+  document.getElementById('label-matin').textContent = s.matin || '9h-12h30';
+  document.getElementById('label-apmidi').textContent = s.apmidi || '13h30-17h';
+  document.getElementById('stag-loading').style.display = 'none';
+  document.getElementById('stag-form').style.display = 'block';
+  window.setDemiTab('matin');
+  setTimeout(() => initSig('sig-matin'), 100);
+}
+
+checkMode();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</body>
+</html>
