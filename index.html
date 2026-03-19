@@ -269,7 +269,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, set, push, onValue, remove, get } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
+import { getDatabase, ref, set, push, onValue, remove, get, update } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
 
 const firebaseConfig = {
   apiKey: "AIzaSyBhSUTy3jTObrTMu6aa5bjiqm3AC8Zd0_s",
@@ -593,7 +593,6 @@ window.validerDemi = async function(demi) {
   updateData['signatures/' + sessionId + '/' + stagKey + '/nom'] = document.getElementById('stag-nom').value.trim();
   updateData['signatures/' + sessionId + '/' + stagKey + '/' + fieldSig] = sigImg;
   updateData['signatures/' + sessionId + '/' + stagKey + '/' + fieldTime] = time;
-  const { update } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
   await update(ref(db), updateData);
   if (demi === 'matin') signesMatin = true; else signesApmidi = true;
   document.getElementById('form-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'none';
@@ -613,4 +612,78 @@ window.validerDemi = async function(demi) {
       document.getElementById('btn-valider-partiel').style.display = 'block';
     }, 1200);
   } else if (demi === 'apmidi' && !signesMatin) {
-    // Après-midi si
+    // Après-midi signé sans le matin
+    document.getElementById('btn-valider-partiel').style.display = 'block';
+  }
+};
+
+// ===== DETECTION MODE (formateur ou stagiaire) =====
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const sid = params.get('session');
+  if (!sid) {
+    document.getElementById('ns-date').value = new Date().toISOString().split('T')[0];
+    loadSessions();
+    return;
+  }
+  // Mode stagiaire
+  sessionId = sid;
+  stagKey = null; signesMatin = false; signesApmidi = false;
+  const btnPartiel = document.getElementById('btn-valider-partiel');
+  if (btnPartiel) btnPartiel.style.display = 'none';
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('sc-stag').style.display = 'block';
+  try {
+    const snap = await get(ref(db, 'sessions/' + sid));
+    if (!snap.exists()) {
+      document.getElementById('stag-loading').style.display = 'none';
+      document.getElementById('stag-err').style.display = 'block';
+      return;
+    }
+    const s = snap.val();
+    document.getElementById('stag-intitule').textContent = s.intitule;
+    document.getElementById('stag-details').textContent = s.formateur + (s.client ? ' · ' + s.client : '') + ' · ' + fmtDate(s.date);
+    const periode = s.periode || 'both';
+    // Afficher seulement les onglets de la période concernée
+    const hasMatin = periode === 'matin' || periode === 'both';
+    const hasApmidi = periode === 'apmidi' || periode === 'both';
+    document.getElementById('dtab-matin').style.display = hasMatin ? 'flex' : 'none';
+    document.getElementById('dtab-apmidi').style.display = hasApmidi ? 'flex' : 'none';
+    if (hasMatin) {
+      document.getElementById('lbl-matin').textContent = s.matin || '9h-12h30';
+    }
+    if (hasApmidi) {
+      document.getElementById('lbl-apmidi').textContent = s.apmidi || '13h30-17h';
+    }
+    // Si seul le matin ou seul l'après-midi, masquer l'onglet non concerné
+    // et pré-remplir les variables signesXxx pour ne pas attendre la signature non requise
+    if (!hasMatin) signesMatin = true;
+    if (!hasApmidi) signesApmidi = true;
+    document.getElementById('stag-loading').style.display = 'none';
+    document.getElementById('stag-form').style.display = 'block';
+    const premierDemi = hasMatin ? 'matin' : 'apmidi';
+    setTimeout(() => { window.setDemi(premierDemi); initSig('sig-' + premierDemi); }, 100);
+  } catch(e) {
+    document.getElementById('stag-loading').style.display = 'none';
+    document.getElementById('stag-err').style.display = 'block';
+  }
+}
+
+// Valider la présence même si une seule période signée
+window.validerPresencePartielle = function() {
+  document.getElementById('stag-form').style.display = 'none';
+  document.getElementById('stag-ok').style.display = 'block';
+};
+
+// Fonction pour afficher/masquer les champs horaires selon la période
+window.majHoraires = function() {
+  const periode = document.getElementById('ns-periode').value;
+  document.getElementById('bloc-matin').style.display = (periode === 'matin' || periode === 'both') ? 'block' : 'none';
+  document.getElementById('bloc-apmidi').style.display = (periode === 'apmidi' || periode === 'both') ? 'block' : 'none';
+};
+
+init();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</body>
+</html>
