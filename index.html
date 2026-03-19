@@ -154,10 +154,20 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
     <input class="f" type="date" id="ns-date"/>
     <div class="fl">Durée</div>
     <input class="f" id="ns-duree" placeholder="Ex : 7h, 3h30..."/>
-    <div class="fl">Horaire matin</div>
-    <input class="f" id="ns-matin" value="9h-12h30"/>
-    <div class="fl">Horaire après-midi</div>
-    <input class="f" id="ns-apmidi" value="13h30-17h"/>
+    <div class="fl">Période de formation</div>
+    <select class="f" id="ns-periode" onchange="majHoraires()">
+      <option value="both">Journée complète (matin + après-midi)</option>
+      <option value="matin">Matin seulement</option>
+      <option value="apmidi">Après-midi seulement</option>
+    </select>
+    <div id="bloc-matin">
+      <div class="fl">Horaire matin</div>
+      <input class="f" id="ns-matin" value="9h-12h30"/>
+    </div>
+    <div id="bloc-apmidi">
+      <div class="fl">Horaire après-midi</div>
+      <input class="f" id="ns-apmidi" value="13h30-17h"/>
+    </div>
     <button class="btn-p" id="btn-creer" onclick="creerSession()">Créer ma session</button>
     <button class="btn-sm" style="width:100%;margin-top:8px;" onclick="showScreen('sc-accueil')">Annuler</button>
   </div>
@@ -226,6 +236,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
         </div>
       </div>
     </div>
+    <button id="btn-valider-partiel" onclick="validerPresencePartielle()" style="display:none;width:100%;padding:12px;border:none;border-radius:10px;background:#f59e0b;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;font-family:Arial;margin-top:8px;">Je n'ai participé qu'à cette période — Terminer</button>
   </div>
   <div class="spage-ok" id="stag-ok"><div style="font-size:64px;margin-bottom:1rem;">✅</div><div style="font-size:22px;font-weight:bold;color:#1a6b35;margin-bottom:8px;">Signatures enregistrées !</div><div style="font-size:14px;color:#888;">Merci, vous pouvez fermer cette page.</div></div>
   <div class="spage-err" id="stag-err"><div style="font-size:48px;margin-bottom:1rem;">⚠️</div><div style="font-size:18px;font-weight:bold;color:#c0392b;margin-bottom:8px;">Session introuvable</div><div style="font-size:13px;color:#888;">Demandez un nouveau QR code à votre formateur.</div></div>
@@ -358,6 +369,7 @@ window.supprimerSession = async function(id, nom) {
 
 // ===== CREER SESSION =====
 window.creerSession = async function() {
+  const periode = document.getElementById('ns-periode').value;
   const vals = {
     formateur: document.getElementById('ns-formateur').value.trim(),
     intitule: document.getElementById('ns-intitule').value.trim(),
@@ -366,10 +378,15 @@ window.creerSession = async function() {
     lieu: document.getElementById('ns-lieu').value.trim(),
     date: document.getElementById('ns-date').value,
     duree: document.getElementById('ns-duree').value.trim(),
-    matin: document.getElementById('ns-matin').value.trim(),
-    apmidi: document.getElementById('ns-apmidi').value.trim()
+    periode: periode,
+    matin: (periode === 'matin' || periode === 'both') ? document.getElementById('ns-matin').value.trim() : '',
+    apmidi: (periode === 'apmidi' || periode === 'both') ? document.getElementById('ns-apmidi').value.trim() : ''
   };
-  const manquants = Object.entries({ 'Formateur': vals.formateur, 'Intitulé': vals.intitule, 'Client': vals.client, 'Convention': vals.convention, 'Lieu': vals.lieu, 'Date': vals.date, 'Durée': vals.duree, 'Horaire matin': vals.matin, 'Horaire après-midi': vals.apmidi }).filter(([k,v]) => !v).map(([k]) => k);
+  // Validation selon la période choisie
+  const obligatoires = { 'Formateur': vals.formateur, 'Intitulé': vals.intitule, 'Client': vals.client, 'Convention': vals.convention, 'Lieu': vals.lieu, 'Date': vals.date, 'Durée': vals.duree };
+  if (periode === 'matin' || periode === 'both') obligatoires['Horaire matin'] = vals.matin;
+  if (periode === 'apmidi' || periode === 'both') obligatoires['Horaire après-midi'] = vals.apmidi;
+  const manquants = Object.entries(obligatoires).filter(([k,v]) => !v).map(([k]) => k);
   const errEl = document.getElementById('err-msg');
   if (manquants.length > 0) {
     errEl.textContent = 'Champs manquants : ' + manquants.join(', ');
@@ -544,8 +561,14 @@ window.modifierNom = function() {
 window.setDemi = function(demi) {
   document.getElementById('zone-matin').style.display = demi === 'matin' ? 'block' : 'none';
   document.getElementById('zone-apmidi').style.display = demi === 'apmidi' ? 'block' : 'none';
-  document.getElementById('dtab-matin').className = 'dtab' + (demi === 'matin' ? ' active' : '') + (signesMatin ? ' done' : '');
-  document.getElementById('dtab-apmidi').className = 'dtab' + (demi === 'apmidi' ? ' active' : '') + (signesApmidi ? ' done' : '');
+  const tabMatin = document.getElementById('dtab-matin');
+  const tabApmidi = document.getElementById('dtab-apmidi');
+  if (tabMatin.style.display !== 'none') {
+    tabMatin.className = 'dtab' + (demi === 'matin' ? ' active' : '') + (signesMatin ? ' done' : '');
+  }
+  if (tabApmidi.style.display !== 'none') {
+    tabApmidi.className = 'dtab' + (demi === 'apmidi' ? ' active' : '') + (signesApmidi ? ' done' : '');
+  }
   if (demi === 'apmidi') setTimeout(() => initSig('sig-apmidi'), 80);
 };
 
@@ -577,50 +600,17 @@ window.validerDemi = async function(demi) {
   document.getElementById('ok-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'block';
   document.getElementById('dtab-' + (demi === 'matin' ? 'matin' : 'apmidi')).className = 'dtab done';
   btn.disabled = false;
+  // Si les deux périodes sont signées, terminer automatiquement
   if (signesMatin && signesApmidi) {
-    setTimeout(() => { document.getElementById('stag-form').style.display = 'none'; document.getElementById('stag-ok').style.display = 'block'; }, 1000);
-  } else if (demi === 'matin') {
-    setTimeout(() => setDemi('apmidi'), 1200);
-  }
-};
-
-// ===== DETECTION MODE (formateur ou stagiaire) =====
-async function init() {
-  const params = new URLSearchParams(window.location.search);
-  const sid = params.get('session');
-  if (!sid) {
-    document.getElementById('ns-date').value = new Date().toISOString().split('T')[0];
-    loadSessions();
-    return;
-  }
-  // Mode stagiaire
-  sessionId = sid;
-  stagKey = null; signesMatin = false; signesApmidi = false;
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('sc-stag').style.display = 'block';
-  try {
-    const snap = await get(ref(db, 'sessions/' + sid));
-    if (!snap.exists()) {
-      document.getElementById('stag-loading').style.display = 'none';
-      document.getElementById('stag-err').style.display = 'block';
-      return;
-    }
-    const s = snap.val();
-    document.getElementById('stag-intitule').textContent = s.intitule;
-    document.getElementById('stag-details').textContent = s.formateur + (s.client ? ' · ' + s.client : '') + ' · ' + fmtDate(s.date);
-    document.getElementById('lbl-matin').textContent = s.matin || '9h-12h30';
-    document.getElementById('lbl-apmidi').textContent = s.apmidi || '13h30-17h';
-    document.getElementById('stag-loading').style.display = 'none';
-    document.getElementById('stag-form').style.display = 'block';
-    setTimeout(() => initSig('sig-matin'), 100);
-  } catch(e) {
-    document.getElementById('stag-loading').style.display = 'none';
-    document.getElementById('stag-err').style.display = 'block';
-  }
-}
-
-init();
-</script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-</body>
-</html>
+    setTimeout(() => {
+      document.getElementById('stag-form').style.display = 'none';
+      document.getElementById('stag-ok').style.display = 'block';
+    }, 1000);
+  } else if (demi === 'matin' && document.getElementById('dtab-apmidi').style.display !== 'none') {
+    // Passer à l'après-midi et afficher le bouton "Valider sans l'autre période"
+    setTimeout(() => {
+      setDemi('apmidi');
+      document.getElementById('btn-valider-partiel').style.display = 'block';
+    }, 1200);
+  } else if (demi === 'apmidi' && !signesMatin) {
+    // Après-midi si
