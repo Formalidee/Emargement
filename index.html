@@ -412,8 +412,9 @@ function generateQR(id) {
 
 // ===== SIGNATURES TEMPS REEL =====
 function ecouterSignatures(id) {
-  if (sigsListener) sigsListener();
-  sigsListener = onValue(ref(db, 'signatures/' + id), snap => {
+  if (sigsListener) { sigsListener(); sigsListener = null; }
+  const sigRef = ref(db, 'signatures/' + id);
+  sigsListener = onValue(sigRef, snap => {
     const sigs = [];
     if (snap.exists()) {
       snap.forEach(child => {
@@ -421,10 +422,11 @@ function ecouterSignatures(id) {
         if (val && val.nom) sigs.push(val);
       });
     }
-    document.getElementById('count-sigs').textContent = sigs.length;
-    document.getElementById('sig-title').textContent = 'Signatures reçues (' + sigs.length + ')';
+    const count = sigs.length;
+    document.getElementById('count-sigs').textContent = count;
+    document.getElementById('sig-title').textContent = 'Signatures reçues (' + count + ')';
     const list = document.getElementById('sig-list');
-    if (sigs.length === 0) {
+    if (count === 0) {
       list.innerHTML = '<div class="empty-sigs">En attente des signatures...</div>';
       return;
     }
@@ -444,6 +446,9 @@ function ecouterSignatures(id) {
         '<div class="sigthumb-w">' + aImg + '<div class="sigthumb-l">Après-midi</div></div>' +
         '</div></div>';
     }).join('');
+  }, error => {
+    console.error('Firebase error:', error);
+    document.getElementById('sig-list').innerHTML = '<div class="empty-sigs" style="color:red;">Erreur de connexion Firebase</div>';
   });
 }
 
@@ -558,8 +563,15 @@ window.validerDemi = async function(demi) {
   const sigImg = c.toDataURL('image/png');
   const time = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   // Écrire dans Firebase avec la clé stagKey
-  await set(ref(db, 'signatures/' + sessionId + '/' + stagKey + '/' + (demi === 'matin' ? 'sigMatin' : 'sigApmidi')), sigImg);
-  await set(ref(db, 'signatures/' + sessionId + '/' + stagKey + '/' + (demi === 'matin' ? 'timeMatin' : 'timeApmidi')), time);
+  const fieldSig = demi === 'matin' ? 'sigMatin' : 'sigApmidi';
+  const fieldTime = demi === 'matin' ? 'timeMatin' : 'timeApmidi';
+  // Mettre à jour en une seule opération pour éviter les problèmes de synchro
+  const updateData = {};
+  updateData['signatures/' + sessionId + '/' + stagKey + '/nom'] = document.getElementById('stag-nom').value.trim();
+  updateData['signatures/' + sessionId + '/' + stagKey + '/' + fieldSig] = sigImg;
+  updateData['signatures/' + sessionId + '/' + stagKey + '/' + fieldTime] = time;
+  const { update } = await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js');
+  await update(ref(db), updateData);
   if (demi === 'matin') signesMatin = true; else signesApmidi = true;
   document.getElementById('form-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'none';
   document.getElementById('ok-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'block';
