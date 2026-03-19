@@ -415,21 +415,35 @@ function ecouterSignatures(id) {
   if (sigsListener) sigsListener();
   sigsListener = onValue(ref(db, 'signatures/' + id), snap => {
     const sigs = [];
-    if (snap.exists()) snap.forEach(child => sigs.push(child.val()));
+    if (snap.exists()) {
+      snap.forEach(child => {
+        const val = child.val();
+        if (val && val.nom) sigs.push(val);
+      });
+    }
     document.getElementById('count-sigs').textContent = sigs.length;
     document.getElementById('sig-title').textContent = 'Signatures reçues (' + sigs.length + ')';
     const list = document.getElementById('sig-list');
-    if (sigs.length === 0) { list.innerHTML = '<div class="empty-sigs">En attente des signatures...</div>'; return; }
+    if (sigs.length === 0) {
+      list.innerHTML = '<div class="empty-sigs">En attente des signatures...</div>';
+      return;
+    }
     sigs.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
     list.innerHTML = sigs.map(sig => {
       const badge = sig.sigMatin && sig.sigApmidi ? '<span class="bok">✓ Complet</span>' : '<span class="bhalf">⏳ Partiel</span>';
-      const mImg = sig.sigMatin ? '<img class="sigthumb" src="' + sig.sigMatin + '"/>' : '<div style="width:70px;height:30px;border:1px dashed #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;">—</div>';
-      const aImg = sig.sigApmidi ? '<img class="sigthumb" src="' + sig.sigApmidi + '"/>' : '<div style="width:70px;height:30px;border:1px dashed #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;">—</div>';
-      return '<div class="sigrow"><div style="flex:1;min-width:0;"><div class="signame">' + sig.nom + '</div><div class="sigmeta">' + badge + '</div></div>' +
-        '<div class="sigthumbs"><div class="sigthumb-w">' + mImg + '<div class="sigthumb-l">Matin</div></div>' +
-        '<div class="sigthumb-w">' + aImg + '<div class="sigthumb-l">Après-midi</div></div></div></div>';
+      const mImg = sig.sigMatin
+        ? '<img class="sigthumb" src="' + sig.sigMatin + '"/>'
+        : '<div style="width:70px;height:30px;border:1px dashed #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;">--</div>';
+      const aImg = sig.sigApmidi
+        ? '<img class="sigthumb" src="' + sig.sigApmidi + '"/>'
+        : '<div style="width:70px;height:30px;border:1px dashed #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#ccc;">--</div>';
+      return '<div class="sigrow">' +
+        '<div style="flex:1;min-width:0;"><div class="signame">' + sig.nom + '</div><div class="sigmeta">' + badge + '</div></div>' +
+        '<div class="sigthumbs">' +
+        '<div class="sigthumb-w">' + mImg + '<div class="sigthumb-l">Matin</div></div>' +
+        '<div class="sigthumb-w">' + aImg + '<div class="sigthumb-l">Après-midi</div></div>' +
+        '</div></div>';
     }).join('');
-    set(ref(db, 'sessions/' + id + '/sigCount'), sigs.length);
   });
 }
 
