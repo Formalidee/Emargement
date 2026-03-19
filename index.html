@@ -198,6 +198,27 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
     <div style="font-size:12px;font-weight:bold;color:#333;margin-bottom:8px;" id="sig-title">Signatures reçues</div>
     <div class="siglist" id="sig-list"><div class="empty-sigs">En attente des signatures...</div></div>
     <button class="btn-sm da" style="width:100%;margin-top:4px;" onclick="resetSigs()">Réinitialiser les signatures</button>
+    <!-- Zone signature formateur -->
+    <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:1rem;margin-top:1rem;">
+      <div style="font-size:12px;font-weight:bold;color:#333;margin-bottom:0.75rem;">Signature du formateur &amp; cachet</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;font-style:italic;text-decoration:underline;">Signature de l'intervenant</div>
+          <div style="border:1px solid #ccc;border-radius:8px;height:80px;touch-action:none;position:relative;">
+            <canvas id="canvas-sig-formateur" width="600" height="160" style="display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:8px;"></canvas>
+          </div>
+          <button onclick="clearFormateurSig('canvas-sig-formateur')" style="font-size:10px;color:#aaa;background:none;border:none;cursor:pointer;margin-top:2px;font-family:Arial;">Effacer</button>
+        </div>
+        <div>
+          <div style="font-size:11px;color:#888;margin-bottom:4px;font-style:italic;text-decoration:underline;">Signature &amp; cachet du signataire</div>
+          <div style="border:1px solid #ccc;border-radius:8px;height:80px;touch-action:none;">
+            <canvas id="canvas-sig-cachet" width="600" height="160" style="display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:8px;"></canvas>
+          </div>
+          <button onclick="clearFormateurSig('canvas-sig-cachet')" style="font-size:10px;color:#aaa;background:none;border:none;cursor:pointer;margin-top:2px;font-family:Arial;">Effacer</button>
+          <input id="input-qualite" placeholder="Qualité du signataire" style="width:100%;border:none;border-bottom:1px solid #ddd;font-size:11px;font-family:Arial;padding:2px 0;margin-top:4px;background:transparent;color:#333;" />
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -261,8 +282,15 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
     <tbody id="pv-tbody"></tbody>
   </table>
   <div class="pv-footer">
-    <div class="pv-fc"><div class="pv-fl">Signature de l'intervenant</div></div>
-    <div class="pv-fc"><div class="pv-fl">Signature &amp; cachet du signataire</div><div style="font-size:8px;color:#888;margin-top:4px;font-style:italic;">Précisez la qualité du signataire</div></div>
+    <div class="pv-fc">
+      <div class="pv-fl">Signature de l'intervenant</div>
+      <img id="pv-sig-formateur" style="max-height:50px;max-width:100%;display:block;margin-top:4px;" src="" alt=""/>
+    </div>
+    <div class="pv-fc">
+      <div class="pv-fl">Signature &amp; cachet du signataire</div>
+      <img id="pv-sig-cachet" style="max-height:50px;max-width:100%;display:block;margin-top:4px;" src="" alt=""/>
+      <div id="pv-qualite" style="font-size:8px;color:#888;margin-top:4px;font-style:italic;"></div>
+    </div>
   </div>
   <div class="pv-mention">Document généré par Formalidée — formalidee.github.io/Emargement</div>
 </div>
@@ -415,6 +443,10 @@ window.ouvrirSession = async function(id) {
   generateQR(id);
   ecouterSignatures(id);
   showScreen('sc-formateur');
+  setTimeout(() => {
+    initFormateurSig('canvas-sig-formateur');
+    initFormateurSig('canvas-sig-cachet');
+  }, 200);
 };
 
 // ===== QR CODE =====
@@ -479,22 +511,41 @@ window.exportPDF = async function() {
   const snap = await get(ref(db, 'signatures/' + sessionId));
   const s = sessionData;
   const sigs = [];
-  if (snap.exists()) snap.forEach(child => sigs.push(child.val()));
+  // Filtrer uniquement les entrées avec un nom (exclure les entrées intermédiaires)
+  if (snap.exists()) snap.forEach(child => {
+    const val = child.val();
+    if (val && val.nom) sigs.push(val);
+  });
   sigs.sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
+  // En-tête PDF
   document.getElementById('pv-meta').innerHTML = [
     ['Convention', s.convention || '—'], ['Client', s.client || '—'], ['Lieu', s.lieu || '—'],
     ['Intitulé', s.intitule], ['Formateur', s.formateur], ['Date', fmtDate(s.date)],
     ['Durée', s.duree || '—'], ['Horaire matin', s.matin || '—'], ['Horaire après-midi', s.apmidi || '—']
   ].map(([l, v]) => '<div class="pv-mi"><div class="pv-ml">' + l + '</div><div class="pv-mv">' + v + '</div></div>').join('');
-  document.getElementById('pv-h-matin').textContent = s.matin || '';
-  document.getElementById('pv-h-apmidi').textContent = s.apmidi || '';
+  // Adapter les colonnes selon la période
+  const periode = s.periode || 'both';
+  const hasMatin = periode === 'matin' || periode === 'both';
+  const hasApmidi = periode === 'apmidi' || periode === 'both';
+  document.getElementById('pv-h-matin').textContent = hasMatin ? (s.matin || '') : '';
+  document.getElementById('pv-h-apmidi').textContent = hasApmidi ? (s.apmidi || '') : '';
+  // Tableau stagiaires
   const empty = Array.from({ length: Math.max(0, 12 - sigs.length) }, () => null);
   document.getElementById('pv-tbody').innerHTML = [...sigs, ...empty].map((sig, i) =>
     '<tr><td class="pv-num">' + (i + 1) + '</td>' +
     '<td class="pv-name">' + (sig ? sig.nom : '') + '</td>' +
-    '<td class="pv-sig">' + (sig && sig.sigMatin ? '<img class="pv-sig-img" src="' + sig.sigMatin + '"/>' : '<div class="pv-nosig"></div>') + '</td>' +
-    '<td class="pv-sig">' + (sig && sig.sigApmidi ? '<img class="pv-sig-img" src="' + sig.sigApmidi + '"/>' : '<div class="pv-nosig"></div>') + '</td></tr>'
+    '<td class="pv-sig">' + (sig && sig.sigMatin && hasMatin ? '<img class="pv-sig-img" src="' + sig.sigMatin + '"/>' : '<div class="pv-nosig"></div>') + '</td>' +
+    '<td class="pv-sig">' + (sig && sig.sigApmidi && hasApmidi ? '<img class="pv-sig-img" src="' + sig.sigApmidi + '"/>' : '<div class="pv-nosig"></div>') + '</td></tr>'
   ).join('');
+  // Signature du formateur
+  const cForm = document.getElementById('canvas-sig-formateur');
+  const cCachet = document.getElementById('canvas-sig-cachet');
+  const pvSigForm = document.getElementById('pv-sig-formateur');
+  const pvSigCachet = document.getElementById('pv-sig-cachet');
+  const pvQualite = document.getElementById('pv-qualite');
+  if (cForm && pvSigForm) pvSigForm.src = cForm.toDataURL();
+  if (cCachet && pvSigCachet) pvSigCachet.src = cCachet.toDataURL();
+  if (pvQualite) pvQualite.textContent = document.getElementById('input-qualite') ? document.getElementById('input-qualite').value : '';
   window.print();
 };
 
@@ -674,6 +725,29 @@ window.validerPresencePartielle = function() {
   document.getElementById('stag-form').style.display = 'none';
   document.getElementById('stag-ok').style.display = 'block';
 };
+
+// Canvas signatures formateur
+window.clearFormateurSig = function(id) {
+  const c = document.getElementById(id);
+  if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
+};
+
+function initFormateurSig(id) {
+  const c = document.getElementById(id);
+  if (!c || c._init) return;
+  c._init = true;
+  const ctx = c.getContext('2d');
+  ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  let drawing = false, lx = 0, ly = 0;
+  function pos(e) { const r = c.getBoundingClientRect(); const s = e.touches ? e.touches[0] : e; return [(s.clientX-r.left)*(c.width/r.width),(s.clientY-r.top)*(c.height/r.height)]; }
+  c.addEventListener('mousedown', e => { drawing=true; const p=pos(e); lx=p[0]; ly=p[1]; });
+  c.addEventListener('mousemove', e => { if(!drawing)return; const p=pos(e); ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p[0],p[1]);ctx.stroke();lx=p[0];ly=p[1]; });
+  c.addEventListener('mouseup', () => drawing=false);
+  c.addEventListener('mouseleave', () => drawing=false);
+  c.addEventListener('touchstart', e => { e.preventDefault(); drawing=true; const p=pos(e); lx=p[0]; ly=p[1]; }, {passive:false});
+  c.addEventListener('touchmove', e => { e.preventDefault(); if(!drawing)return; const p=pos(e); ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p[0],p[1]);ctx.stroke();lx=p[0];ly=p[1]; }, {passive:false});
+  c.addEventListener('touchend', () => drawing=false);
+}
 
 // Fonction pour afficher/masquer les champs horaires selon la période
 window.majHoraires = function() {
