@@ -583,25 +583,14 @@ window.validerDemi = async function(demi) {
   const now = new Date();
   const time = now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 
-  // Chercher si le stagiaire a déjà une entrée
-  const snap = await get(ref(db, 'signatures/' + currentSessionId));
-  let existingKey = null;
-  let existingData = {};
-  if (snap.exists()) {
-    snap.forEach(child => {
-      if (child.val().nom === nom) { existingKey = child.key; existingData = child.val(); }
-    });
-  }
-
-  if (existingKey) {
-    existingData[demi === 'matin' ? 'sigMatin' : 'sigApmidi'] = sigImg;
-    existingData[demi === 'matin' ? 'timeMatin' : 'timeApmidi'] = time;
-    await set(ref(db, 'signatures/' + currentSessionId + '/' + existingKey), existingData);
-  } else {
-    const newSig = { nom, createdAt: now.toISOString() };
-    newSig[demi === 'matin' ? 'sigMatin' : 'sigApmidi'] = sigImg;
-    newSig[demi === 'matin' ? 'timeMatin' : 'timeApmidi'] = time;
-    await push(ref(db, 'signatures/' + currentSessionId), newSig);
+  // Utiliser la clé stagiaire créée à la confirmation du nom
+  const stagKey = window.currentStagKey;
+  if (stagKey) {
+    // Mettre à jour uniquement le champ de la demi-journée
+    const field = demi === 'matin' ? 'sigMatin' : 'sigApmidi';
+    const timeField = demi === 'matin' ? 'timeMatin' : 'timeApmidi';
+    await set(ref(db, 'signatures/' + currentSessionId + '/' + stagKey + '/' + field), sigImg);
+    await set(ref(db, 'signatures/' + currentSessionId + '/' + stagKey + '/' + timeField), time);
   }
 
   signesParDemi[demi] = true;
@@ -631,6 +620,7 @@ async function checkMode() {
   }
   currentSessionId = sessionId;
   signesParDemi = { matin: false, apmidi: false };
+  window.currentStagKey = null;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('view-stagiaire').style.display = 'block';
   const snap = await get(ref(db, 'sessions/' + sessionId));
@@ -651,7 +641,7 @@ async function checkMode() {
   setTimeout(() => initSig('sig-matin'), 100);
 }
 
-window.validerNomStagiaire = function() {
+window.validerNomStagiaire = async function() {
   const nom = document.getElementById('stag-nom').value.trim();
   if (!nom) { alert('Veuillez saisir votre nom et prénom.'); return; }
   document.getElementById('stag-nom').blur();
@@ -660,6 +650,11 @@ window.validerNomStagiaire = function() {
   document.getElementById('nom-confirme-text').textContent = nom;
   document.getElementById('nom-confirme').style.display = 'flex';
   document.getElementById('demi-section').style.display = 'block';
+  // Créer l'entrée stagiaire dans Firebase maintenant pour avoir une clé stable
+  const now = new Date();
+  const newRef = push(ref(db, 'signatures/' + currentSessionId));
+  await set(newRef, { nom, createdAt: now.toISOString() });
+  window.currentStagKey = newRef.key;
   setTimeout(() => initSig('sig-matin'), 100);
 };
 
