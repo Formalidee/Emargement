@@ -666,4 +666,15 @@ window.validerNomStagiaire = async function() {
 };
 
 window.modifierNom = function() {
-  document.getElementBy
+  document.getElementById('stag-nom').readOnly = false;
+  document.getElementById('stag-nom').focus();
+  document.getElementById('stag-nom-valide').style.display = 'flex';
+  document.getElementById('nom-confirme').style.display = 'none';
+  document.getElementById('demi-section').style.display = 'none';
+};
+
+checkMode();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</body>
+</html>
