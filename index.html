@@ -582,16 +582,21 @@ window.validerDemi = async function(demi) {
   const sigImg = c.toDataURL('image/png');
   const now = new Date();
   const time = now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  const field = demi === 'matin' ? 'sigMatin' : 'sigApmidi';
+  const timeField = demi === 'matin' ? 'timeMatin' : 'timeApmidi';
 
-  // Utiliser la clé stagiaire créée à la confirmation du nom
-  const stagKey = window.currentStagKey;
-  if (stagKey) {
-    // Mettre à jour uniquement le champ de la demi-journée
-    const field = demi === 'matin' ? 'sigMatin' : 'sigApmidi';
-    const timeField = demi === 'matin' ? 'timeMatin' : 'timeApmidi';
-    await set(ref(db, 'signatures/' + currentSessionId + '/' + stagKey + '/' + field), sigImg);
-    await set(ref(db, 'signatures/' + currentSessionId + '/' + stagKey + '/' + timeField), time);
+  // Vérifier qu'on a bien une clé stagiaire — si non, en créer une
+  if (!window.currentStagKey) {
+    const newRef = push(ref(db, 'signatures/' + currentSessionId));
+    await set(newRef, { nom: nom, createdAt: now.toISOString() });
+    window.currentStagKey = newRef.key;
   }
+
+  // Écrire uniquement le champ de signature dans l'entrée existante
+  await set(ref(db, 'signatures/' + currentSessionId + '/' + window.currentStagKey + '/' + field), sigImg);
+  await set(ref(db, 'signatures/' + currentSessionId + '/' + window.currentStagKey + '/' + timeField), time);
+  // S'assurer que le nom est bien présent
+  await set(ref(db, 'signatures/' + currentSessionId + '/' + window.currentStagKey + '/nom'), nom);
 
   signesParDemi[demi] = true;
   document.getElementById('form-' + (demi === 'matin' ? 'matin' : 'apmidi')).style.display = 'none';
@@ -644,30 +649,21 @@ async function checkMode() {
 window.validerNomStagiaire = async function() {
   const nom = document.getElementById('stag-nom').value.trim();
   if (!nom) { alert('Veuillez saisir votre nom et prénom.'); return; }
+  const btn = document.getElementById('stag-nom-valide');
+  btn.disabled = true; btn.textContent = 'Enregistrement...';
   document.getElementById('stag-nom').blur();
   document.getElementById('stag-nom').readOnly = true;
-  document.getElementById('stag-nom-valide').style.display = 'none';
+  // Créer une entrée Firebase unique pour CE stagiaire sur CE téléphone
+  const now = new Date();
+  const newRef = push(ref(db, 'signatures/' + currentSessionId));
+  await set(newRef, { nom: nom, createdAt: now.toISOString() });
+  window.currentStagKey = newRef.key;
+  btn.style.display = 'none';
   document.getElementById('nom-confirme-text').textContent = nom;
   document.getElementById('nom-confirme').style.display = 'flex';
   document.getElementById('demi-section').style.display = 'block';
-  // Créer l'entrée stagiaire dans Firebase maintenant pour avoir une clé stable
-  const now = new Date();
-  const newRef = push(ref(db, 'signatures/' + currentSessionId));
-  await set(newRef, { nom, createdAt: now.toISOString() });
-  window.currentStagKey = newRef.key;
   setTimeout(() => initSig('sig-matin'), 100);
 };
 
 window.modifierNom = function() {
-  document.getElementById('stag-nom').readOnly = false;
-  document.getElementById('stag-nom').focus();
-  document.getElementById('stag-nom-valide').style.display = 'flex';
-  document.getElementById('nom-confirme').style.display = 'none';
-  document.getElementById('demi-section').style.display = 'none';
-};
-
-checkMode();
-</script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-</body>
-</html>
+  document.getElementBy
