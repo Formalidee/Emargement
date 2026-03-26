@@ -199,23 +199,25 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
     <div class="siglist" id="sig-list"><div class="empty-sigs">En attente des signatures...</div></div>
     <button class="btn-sm da" style="width:100%;margin-top:4px;" onclick="resetSigs()">Réinitialiser les signatures</button>
     <!-- Zone signature formateur -->
-    <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:1rem;margin-top:1rem;">
-      <div style="font-size:12px;font-weight:bold;color:#333;margin-bottom:0.75rem;">Signature du formateur &amp; cachet</div>
+    <div style="background:#fff;border:1px solid #eee;border-radius:10px;padding:1rem;margin-top:1rem;" id="zone-sig-formateur">
+      <div style="font-size:12px;font-weight:bold;color:#333;margin-bottom:0.75rem;">&#9998; Signature du formateur &amp; cachet</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         <div>
           <div style="font-size:11px;color:#888;margin-bottom:4px;font-style:italic;text-decoration:underline;">Signature de l'intervenant</div>
-          <div style="border:1px solid #ccc;border-radius:8px;height:80px;touch-action:none;position:relative;">
-            <canvas id="canvas-sig-formateur" width="600" height="160" style="display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:8px;"></canvas>
+          <div style="border:2px solid #1a56db;border-radius:8px;background:#fafcff;position:relative;overflow:hidden;" id="wrap-sig-formateur">
+            <canvas id="canvas-sig-formateur" style="display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:6px;"></canvas>
+            <div id="hint-sig-formateur" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:#b0c4de;pointer-events:none;white-space:nowrap;">Signez ici avec le doigt</div>
           </div>
-          <button onclick="clearFormateurSig('canvas-sig-formateur')" style="font-size:10px;color:#aaa;background:none;border:none;cursor:pointer;margin-top:2px;font-family:Arial;">Effacer</button>
+          <button onclick="clearFormateurSig('canvas-sig-formateur')" style="font-size:10px;color:#1a56db;background:none;border:none;cursor:pointer;margin-top:3px;font-family:Arial;">&#8635; Effacer</button>
         </div>
         <div>
           <div style="font-size:11px;color:#888;margin-bottom:4px;font-style:italic;text-decoration:underline;">Signature &amp; cachet du signataire</div>
-          <div style="border:1px solid #ccc;border-radius:8px;height:80px;touch-action:none;">
-            <canvas id="canvas-sig-cachet" width="600" height="160" style="display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:8px;"></canvas>
+          <div style="border:2px solid #1a56db;border-radius:8px;background:#fafcff;position:relative;overflow:hidden;" id="wrap-sig-cachet">
+            <canvas id="canvas-sig-cachet" style="display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:6px;"></canvas>
+            <div id="hint-sig-cachet" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:#b0c4de;pointer-events:none;white-space:nowrap;">Signez ici avec le doigt</div>
           </div>
-          <button onclick="clearFormateurSig('canvas-sig-cachet')" style="font-size:10px;color:#aaa;background:none;border:none;cursor:pointer;margin-top:2px;font-family:Arial;">Effacer</button>
-          <input id="input-qualite" placeholder="Qualité du signataire" style="width:100%;border:none;border-bottom:1px solid #ddd;font-size:11px;font-family:Arial;padding:2px 0;margin-top:4px;background:transparent;color:#333;" />
+          <button onclick="clearFormateurSig('canvas-sig-cachet')" style="font-size:10px;color:#1a56db;background:none;border:none;cursor:pointer;margin-top:3px;font-family:Arial;">&#8635; Effacer</button>
+          <input id="input-qualite" placeholder="Qualité du signataire (ex : Directeur)" style="width:100%;border:none;border-bottom:1px solid #1a56db;font-size:11px;font-family:Arial;padding:3px 0;margin-top:6px;background:transparent;color:#333;" />
         </div>
       </div>
     </div>
@@ -443,10 +445,13 @@ window.ouvrirSession = async function(id) {
   generateQR(id);
   ecouterSignatures(id);
   showScreen('sc-formateur');
-  setTimeout(() => {
-    initFormateurSig('canvas-sig-formateur');
-    initFormateurSig('canvas-sig-cachet');
-  }, 200);
+  // Init canvas après rendu complet (requestAnimationFrame garantit que le DOM est peint)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      initFormateurSig('canvas-sig-formateur');
+      initFormateurSig('canvas-sig-cachet');
+    });
+  });
 };
 
 // ===== QR CODE =====
@@ -537,15 +542,33 @@ window.exportPDF = async function() {
     '<td class="pv-sig">' + (sig && sig.sigMatin && hasMatin ? '<img class="pv-sig-img" src="' + sig.sigMatin + '"/>' : '<div class="pv-nosig"></div>') + '</td>' +
     '<td class="pv-sig">' + (sig && sig.sigApmidi && hasApmidi ? '<img class="pv-sig-img" src="' + sig.sigApmidi + '"/>' : '<div class="pv-nosig"></div>') + '</td></tr>'
   ).join('');
-  // Signature du formateur
+  // Signature du formateur — export via canvas temporaire normalisé
+  function canvasToExportDataURL(srcCanvas) {
+    if (!srcCanvas) return '';
+    // Vérifier si le canvas a du contenu (non vide)
+    const px = srcCanvas.getContext('2d').getImageData(0, 0, srcCanvas.width, srcCanvas.height).data;
+    let hasContent = false;
+    for (let i = 3; i < px.length; i += 4) { if (px[i] > 10) { hasContent = true; break; } }
+    if (!hasContent) return '';
+    // Créer un canvas temporaire sans scaling devicePixelRatio pour l'export
+    const tmp = document.createElement('canvas');
+    const cssW = srcCanvas.offsetWidth || 300;
+    const cssH = srcCanvas.offsetHeight || 80;
+    tmp.width = cssW; tmp.height = cssH;
+    const tmpCtx = tmp.getContext('2d');
+    tmpCtx.drawImage(srcCanvas, 0, 0, srcCanvas.width, srcCanvas.height, 0, 0, cssW, cssH);
+    return tmp.toDataURL('image/png');
+  }
   const cForm = document.getElementById('canvas-sig-formateur');
   const cCachet = document.getElementById('canvas-sig-cachet');
   const pvSigForm = document.getElementById('pv-sig-formateur');
   const pvSigCachet = document.getElementById('pv-sig-cachet');
   const pvQualite = document.getElementById('pv-qualite');
-  if (cForm && pvSigForm) pvSigForm.src = cForm.toDataURL();
-  if (cCachet && pvSigCachet) pvSigCachet.src = cCachet.toDataURL();
-  if (pvQualite) pvQualite.textContent = document.getElementById('input-qualite') ? document.getElementById('input-qualite').value : '';
+  const dataForm = canvasToExportDataURL(cForm);
+  const dataCachet = canvasToExportDataURL(cCachet);
+  if (pvSigForm) { pvSigForm.src = dataForm; pvSigForm.style.display = dataForm ? 'block' : 'none'; }
+  if (pvSigCachet) { pvSigCachet.src = dataCachet; pvSigCachet.style.display = dataCachet ? 'block' : 'none'; }
+  if (pvQualite) pvQualite.textContent = (document.getElementById('input-qualite') || {}).value || '';
   window.print();
 };
 
@@ -729,35 +752,8 @@ window.validerPresencePartielle = function() {
 // Canvas signatures formateur
 window.clearFormateurSig = function(id) {
   const c = document.getElementById(id);
-  if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height);
-};
-
-function initFormateurSig(id) {
-  const c = document.getElementById(id);
-  if (!c || c._init) return;
-  c._init = true;
+  if (!c) return;
   const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  let drawing = false, lx = 0, ly = 0;
-  function pos(e) { const r = c.getBoundingClientRect(); const s = e.touches ? e.touches[0] : e; return [(s.clientX-r.left)*(c.width/r.width),(s.clientY-r.top)*(c.height/r.height)]; }
-  c.addEventListener('mousedown', e => { drawing=true; const p=pos(e); lx=p[0]; ly=p[1]; });
-  c.addEventListener('mousemove', e => { if(!drawing)return; const p=pos(e); ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p[0],p[1]);ctx.stroke();lx=p[0];ly=p[1]; });
-  c.addEventListener('mouseup', () => drawing=false);
-  c.addEventListener('mouseleave', () => drawing=false);
-  c.addEventListener('touchstart', e => { e.preventDefault(); drawing=true; const p=pos(e); lx=p[0]; ly=p[1]; }, {passive:false});
-  c.addEventListener('touchmove', e => { e.preventDefault(); if(!drawing)return; const p=pos(e); ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(p[0],p[1]);ctx.stroke();lx=p[0];ly=p[1]; }, {passive:false});
-  c.addEventListener('touchend', () => drawing=false);
-}
-
-// Fonction pour afficher/masquer les champs horaires selon la période
-window.majHoraires = function() {
-  const periode = document.getElementById('ns-periode').value;
-  document.getElementById('bloc-matin').style.display = (periode === 'matin' || periode === 'both') ? 'block' : 'none';
-  document.getElementById('bloc-apmidi').style.display = (periode === 'apmidi' || periode === 'both') ? 'block' : 'none';
-};
-
-init();
-</script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-</body>
-</html>
+  ctx.clearRect(0, 0, c.width, c.height);
+  // Réafficher le hint
+  const hintId = id === 'ca
