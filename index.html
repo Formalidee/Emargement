@@ -218,17 +218,25 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
           <div class="sig-label">Signature de l'intervenant</div>
           <div class="sig-canvas-wrap" id="wrap-sig-formateur">
             <canvas id="canvas-sig-formateur"></canvas>
-            <div class="sig-hint" id="hint-sig-formateur">Signez ici avec le doigt</div>
+            <div class="sig-hint" id="hint-sig-formateur">Signez ici avec le doigt ou la souris</div>
           </div>
-          <button class="btn-eff-sm" onclick="clearCanvasFormateur('canvas-sig-formateur','hint-sig-formateur')">Effacer</button>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn-eff-sm" onclick="clearCanvasFormateur('canvas-sig-formateur','hint-sig-formateur')">Effacer</button>
+            <button class="btn-eff-sm" style="color:#1a6b35;" onclick="validerSigFormateur('canvas-sig-formateur')">Valider &#10003;</button>
+          </div>
+          <div id="ok-sig-formateur" style="display:none;font-size:10px;color:#1a6b35;margin-top:2px;">Signature enregistree</div>
         </div>
         <div>
           <div class="sig-label">Signature &amp; cachet du signataire</div>
           <div class="sig-canvas-wrap" id="wrap-sig-cachet">
             <canvas id="canvas-sig-cachet"></canvas>
-            <div class="sig-hint" id="hint-sig-cachet">Signez ici avec le doigt</div>
+            <div class="sig-hint" id="hint-sig-cachet">Signez ici avec le doigt ou la souris</div>
           </div>
-          <button class="btn-eff-sm" onclick="clearCanvasFormateur('canvas-sig-cachet','hint-sig-cachet')">Effacer</button>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn-eff-sm" onclick="clearCanvasFormateur('canvas-sig-cachet','hint-sig-cachet')">Effacer</button>
+            <button class="btn-eff-sm" style="color:#1a6b35;" onclick="validerSigFormateur('canvas-sig-cachet')">Valider &#10003;</button>
+          </div>
+          <div id="ok-sig-cachet" style="display:none;font-size:10px;color:#1a6b35;margin-top:2px;">Signature enregistree</div>
           <input id="input-qualite" placeholder="Qualite du signataire (ex : Directeur)" style="width:100%;border:none;border-bottom:1px solid #1a56db;font-size:11px;font-family:Arial;padding:3px 0;margin-top:6px;background:transparent;color:#333;"/>
         </div>
       </div>
@@ -492,6 +500,7 @@ window.ouvrirSession = async function(id) {
   document.getElementById('count-form').textContent = sessionData.formateur.split(' ')[0];
   sigFormateurData = '';
   sigCachetData = '';
+  ['ok-sig-formateur','ok-sig-cachet'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
   ['canvas-sig-formateur','canvas-sig-cachet'].forEach(cid => {
     const c = document.getElementById(cid); if (c) c._init = false;
   });
@@ -624,10 +633,10 @@ function initCanvasFormateur(id) {
   function pos(e) { const r = c.getBoundingClientRect(); const s = e.touches ? e.touches[0] : e; return [s.clientX - r.left, s.clientY - r.top]; }
   function start(e) { drawing = true; const p = pos(e); lx = p[0]; ly = p[1]; const h = document.getElementById(hintId); if (h) h.style.display = 'none'; }
   function move(e)  { if (!drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(p[0],p[1]); ctx.stroke(); lx = p[0]; ly = p[1]; }
-  function stop() {
-    drawing = false;
+  function stop() { drawing = false; }
+  function saveCanvas() {
     const tmp = document.createElement('canvas');
-    tmp.width = c.offsetWidth; tmp.height = c.offsetHeight;
+    tmp.width = c.offsetWidth || 300; tmp.height = c.offsetHeight || 80;
     tmp.getContext('2d').drawImage(c, 0, 0, c.width, c.height, 0, 0, tmp.width, tmp.height);
     const data = tmp.toDataURL('image/png');
     const px = tmp.getContext('2d').getImageData(0,0,tmp.width,tmp.height).data;
@@ -638,12 +647,33 @@ function initCanvasFormateur(id) {
   }
   c.addEventListener('mousedown', start);
   c.addEventListener('mousemove', move);
-  c.addEventListener('mouseup', stop);
-  c.addEventListener('mouseleave', stop);
+  c.addEventListener('mouseup', () => { stop(); saveCanvas(); });
+  c.addEventListener('mouseleave', stop); // stop sans save (peut reprendre)
   c.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, { passive: false });
   c.addEventListener('touchmove',  e => { e.preventDefault(); move(e);  }, { passive: false });
-  c.addEventListener('touchend',   stop);
+  c.addEventListener('touchend',   () => { stop(); saveCanvas(); });
 }
+
+// Validation explicite de la signature formateur (bouton Valider)
+window.validerSigFormateur = function(canvasId) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const tmp = document.createElement('canvas');
+  tmp.width = c.offsetWidth || 300; tmp.height = c.offsetHeight || 80;
+  tmp.getContext('2d').drawImage(c, 0, 0, c.width, c.height, 0, 0, tmp.width, tmp.height);
+  const data = tmp.toDataURL('image/png');
+  const px = tmp.getContext('2d').getImageData(0,0,tmp.width,tmp.height).data;
+  let hasContent = false;
+  for (let i=3;i<px.length;i+=4){if(px[i]>10){hasContent=true;break;}}
+  if (!hasContent) { alert('Veuillez tracer votre signature avant de valider.'); return; }
+  if (canvasId === 'canvas-sig-formateur') {
+    sigFormateurData = data;
+    document.getElementById('ok-sig-formateur').style.display = 'block';
+  } else {
+    sigCachetData = data;
+    document.getElementById('ok-sig-cachet').style.display = 'block';
+  }
+};
 
 window.clearCanvasFormateur = function(canvasId, hintId) {
   const c = document.getElementById(canvasId);
