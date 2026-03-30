@@ -237,7 +237,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
             <button class="btn-eff-sm" style="color:#1a6b35;" onclick="validerSigFormateur('canvas-sig-cachet')">Valider &#10003;</button>
           </div>
           <div id="ok-sig-cachet" style="display:none;font-size:10px;color:#1a6b35;margin-top:2px;">Signature enregistree</div>
-          <input id="input-qualite" placeholder="Qualite du signataire (ex : Directeur)" style="width:100%;border:none;border-bottom:1px solid #1a56db;font-size:11px;font-family:Arial;padding:3px 0;margin-top:6px;background:transparent;color:#333;"/>
+          <input id="input-qualite" placeholder="Qualite du signataire (ex : Directeur)" oninput="sauvegarderQualite()" style="width:100%;border:none;border-bottom:1px solid #1a56db;font-size:11px;font-family:Arial;padding:3px 0;margin-top:6px;background:transparent;color:#333;"/>
         </div>
       </div>
     </div>
@@ -498,19 +498,37 @@ window.ouvrirSession = async function(id) {
   document.getElementById('f-intitule').textContent = sessionData.intitule;
   document.getElementById('f-details').textContent = sessionData.formateur + (sessionData.client ? ' · ' + sessionData.client : '') + ' · ' + fmtDate(sessionData.date);
   document.getElementById('count-form').textContent = sessionData.formateur.split(' ')[0];
-  sigFormateurData = '';
-  sigCachetData = '';
-  ['ok-sig-formateur','ok-sig-cachet'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
+  // Recuperer les signatures formateur persistees dans Firebase
+  sigFormateurData = sessionData.sigFormateur || '';
+  sigCachetData    = sessionData.sigCachet    || '';
+  const qualiteSauvegardee = sessionData.qualiteSignataire || '';
+
+  // Indicateurs visuels "Signature enregistree"
+  const okForm   = document.getElementById('ok-sig-formateur');
+  const okCachet = document.getElementById('ok-sig-cachet');
+  if (okForm)   okForm.style.display   = sigFormateurData ? 'block' : 'none';
+  if (okCachet) okCachet.style.display = sigCachetData    ? 'block' : 'none';
+
+  // Champ qualite
+  const inputQualite = document.getElementById('input-qualite');
+  if (inputQualite) inputQualite.value = qualiteSauvegardee;
+
+  // Reinitialiser les canvas (forcer reinit)
   ['canvas-sig-formateur','canvas-sig-cachet'].forEach(cid => {
     const c = document.getElementById(cid); if (c) c._init = false;
   });
+
   generateQR(id);
   ecouterSignatures(id);
   showScreen('sc-formateur');
-  // Initialiser les canvas formateur apres rendu
+
+  // Initialiser les canvas formateur apres rendu, puis y restaurer les signatures
   requestAnimationFrame(() => requestAnimationFrame(() => {
     initCanvasFormateur('canvas-sig-formateur');
     initCanvasFormateur('canvas-sig-cachet');
+    // Restaurer visuellement les signatures dans les canvas si elles existent
+    if (sigFormateurData) restaurerCanvasFormateur('canvas-sig-formateur', sigFormateurData);
+    if (sigCachetData)    restaurerCanvasFormateur('canvas-sig-cachet',    sigCachetData);
   }));
 };
 
@@ -599,15 +617,17 @@ window.exportPDF = async function() {
     '</tr>'
   ).join('');
 
-  // Signatures formateur - utiliser les donnees stockees en memoire
-  const dataForm   = sigFormateurData;
-  const dataCachet = sigCachetData;
+  // Signatures formateur - priorite variables memoire, fallback Firebase
+  const dataForm   = sigFormateurData   || (sessionData && sessionData.sigFormateur ? sessionData.sigFormateur : '');
+  const dataCachet = sigCachetData      || (sessionData && sessionData.sigCachet    ? sessionData.sigCachet    : '');
+  const dataQualite = (document.getElementById('input-qualite') ? document.getElementById('input-qualite').value.trim() : '')
+                     || (sessionData && sessionData.qualiteSignataire ? sessionData.qualiteSignataire : '');
   const pvForm   = document.getElementById('pv-sig-formateur');
   const pvCachet = document.getElementById('pv-sig-cachet');
   if (pvForm)   { pvForm.src = dataForm;   pvForm.style.display   = dataForm   ? 'block' : 'none'; }
   if (pvCachet) { pvCachet.src = dataCachet; pvCachet.style.display = dataCachet ? 'block' : 'none'; }
   const pvQualite = document.getElementById('pv-qualite');
-  if (pvQualite) pvQualite.textContent = document.getElementById('input-qualite').value || '';
+  if (pvQualite) pvQualite.textContent = dataQualite;
 
   window.print();
 };
@@ -655,7 +675,7 @@ function initCanvasFormateur(id) {
 }
 
 // Validation explicite de la signature formateur (bouton Valider)
-window.validerSigFormateur = function(canvasId) {
+window.validerSigFormateur = async function(canvasId) {
   const c = document.getElementById(canvasId);
   if (!c) return;
   const tmp = document.createElement('canvas');
@@ -666,23 +686,73 @@ window.validerSigFormateur = function(canvasId) {
   let hasContent = false;
   for (let i=3;i<px.length;i+=4){if(px[i]>10){hasContent=true;break;}}
   if (!hasContent) { alert('Veuillez tracer votre signature avant de valider.'); return; }
+  const qualite = document.getElementById('input-qualite') ? document.getElementById('input-qualite').value.trim() : '';
   if (canvasId === 'canvas-sig-formateur') {
     sigFormateurData = data;
     document.getElementById('ok-sig-formateur').style.display = 'block';
+    if (sessionId) {
+      const upd = {};
+      upd['sessions/' + sessionId + '/sigFormateur'] = data;
+      upd['sessions/' + sessionId + '/qualiteSignataire'] = qualite;
+      await update(ref(db), upd);
+    }
   } else {
     sigCachetData = data;
     document.getElementById('ok-sig-cachet').style.display = 'block';
+    if (sessionId) {
+      const upd = {};
+      upd['sessions/' + sessionId + '/sigCachet'] = data;
+      upd['sessions/' + sessionId + '/qualiteSignataire'] = qualite;
+      await update(ref(db), upd);
+    }
   }
 };
 
-window.clearCanvasFormateur = function(canvasId, hintId) {
+window.clearCanvasFormateur = async function(canvasId, hintId) {
   const c = document.getElementById(canvasId);
   if (c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); }
   const h = document.getElementById(hintId);
   if (h) h.style.display = 'block';
-  if (canvasId === 'canvas-sig-formateur') sigFormateurData = '';
-  else sigCachetData = '';
+  const okId = canvasId === 'canvas-sig-formateur' ? 'ok-sig-formateur' : 'ok-sig-cachet';
+  const okEl = document.getElementById(okId);
+  if (okEl) okEl.style.display = 'none';
+  if (canvasId === 'canvas-sig-formateur') {
+    sigFormateurData = '';
+    if (sessionId) await update(ref(db), { ['sessions/' + sessionId + '/sigFormateur']: '' });
+  } else {
+    sigCachetData = '';
+    if (sessionId) await update(ref(db), { ['sessions/' + sessionId + '/sigCachet']: '' });
+  }
 };
+
+// Sauvegarder la qualite du signataire dans Firebase (appel en temps reel)
+let _qualiteTimer = null;
+window.sauvegarderQualite = function() {
+  if (_qualiteTimer) clearTimeout(_qualiteTimer);
+  _qualiteTimer = setTimeout(async () => {
+    if (!sessionId) return;
+    const val = document.getElementById('input-qualite').value.trim();
+    await update(ref(db), { ['sessions/' + sessionId + '/qualiteSignataire']: val });
+  }, 800);
+};
+
+// Restaurer visuellement une signature dans un canvas formateur
+function restaurerCanvasFormateur(canvasId, dataURL) {
+  if (!dataURL) return;
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const img = new Image();
+  img.onload = function() {
+    const ctx = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    ctx.drawImage(img, 0, 0, c.offsetWidth * dpr, c.offsetHeight * dpr);
+    // Masquer le hint
+    const hintId = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
+    const h = document.getElementById(hintId);
+    if (h) h.style.display = 'none';
+  };
+  img.src = dataURL;
+}
 
 // ===== CANVAS STAGIAIRE =====
 function initSig(id) {
