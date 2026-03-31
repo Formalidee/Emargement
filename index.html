@@ -70,8 +70,8 @@ input.f:focus,select.f:focus{outline:none;border-color:#1a56db;background:#fff;}
 .sig-formateur-titre{font-size:12px;font-weight:bold;color:#333;margin-bottom:0.75rem;}
 .sig-formateur-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .sig-canvas-wrap{border:2px solid #1a56db;border-radius:8px;background:#fafcff;position:relative;overflow:hidden;height:80px;}
-.sig-canvas-wrap canvas{display:block;width:100%;height:80px;cursor:crosshair;touch-action:none;border-radius:6px;}
-.sig-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:11px;color:#b0c4de;pointer-events:none;white-space:nowrap;}
+.sig-canvas-wrap canvas{display:block;width:100%;height:80px;cursor:pointer;touch-action:auto;border-radius:6px;pointer-events:none;}
+.sig-hint{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#1a56db;pointer-events:none;white-space:nowrap;font-weight:bold;letter-spacing:0.3px;}
 .sig-label{font-size:11px;color:#888;margin-bottom:4px;font-style:italic;text-decoration:underline;}
 .btn-eff-sm{font-size:10px;color:#1a56db;background:none;border:none;cursor:pointer;margin-top:3px;font-family:Arial;padding:0;}
 .stag-page{max-width:480px;margin:0 auto;padding:1rem;min-height:100vh;background:#f0f2f5;}
@@ -695,13 +695,11 @@ function initCanvasFormateur(id) {
     if (id === 'canvas-sig-formateur') sigFormateurData = hasContent ? data : '';
     else sigCachetData = hasContent ? data : '';
   }
+  // Dessin uniquement sur PC (la modale gere le mobile)
   c.addEventListener('mousedown', start);
   c.addEventListener('mousemove', move);
   c.addEventListener('mouseup', () => { stop(); saveCanvas(); });
-  c.addEventListener('mouseleave', stop); // stop sans save (peut reprendre)
-  c.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, { passive: false });
-  c.addEventListener('touchmove',  e => { e.preventDefault(); move(e);  }, { passive: false });
-  c.addEventListener('touchend',   () => { stop(); saveCanvas(); });
+  c.addEventListener('mouseleave', stop);
 }
 
 // Validation explicite de la signature formateur (bouton Valider)
@@ -776,10 +774,10 @@ function restaurerCanvasFormateur(canvasId, dataURL) {
     const ctx = c.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
     ctx.drawImage(img, 0, 0, c.offsetWidth * dpr, c.offsetHeight * dpr);
-    // Masquer le hint
+    // Changer le hint pour indiquer qu'on peut modifier
     const hintId = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
     const h = document.getElementById(hintId);
-    if (h) h.style.display = 'none';
+    if (h) h.textContent = '✎ Modifier la signature';
   };
   img.src = dataURL;
 }
