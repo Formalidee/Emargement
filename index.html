@@ -749,6 +749,11 @@ window.clearCanvasFormateur = async function(canvasId, hintId) {
   const hintIdClear = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
   const hClear = document.getElementById(hintIdClear);
   if (hClear) { hClear.textContent = '\uD83D\uDCDD Tapez pour signer'; hClear.classList.remove('has-sig'); }
+  // Effacer l'image de fond du wrap
+  const wrapIdClear = canvasId === 'canvas-sig-formateur' ? 'wrap-sig-formateur' : 'wrap-sig-cachet';
+  const wrapClear = document.getElementById(wrapIdClear);
+  if (wrapClear) wrapClear.style.backgroundImage = 'none';
+
   if (canvasId === 'canvas-sig-formateur') {
     sigFormateurData = '';
     if (sessionId) await update(ref(db), { ['sessions/' + sessionId + '/sigFormateur']: '' });
@@ -772,19 +777,19 @@ window.sauvegarderQualite = function() {
 // Restaurer visuellement une signature dans un canvas formateur
 function restaurerCanvasFormateur(canvasId, dataURL) {
   if (!dataURL) return;
-  const c = document.getElementById(canvasId);
-  if (!c) return;
-  const img = new Image();
-  img.onload = function() {
-    const ctx = c.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    ctx.drawImage(img, 0, 0, c.offsetWidth * dpr, c.offsetHeight * dpr);
-    // Changer le hint pour indiquer qu'on peut modifier
-    const hintId = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
-    const h = document.getElementById(hintId);
-    if (h) { h.textContent = '✎ modifier'; h.classList.add('has-sig'); }
-  };
-  img.src = dataURL;
+  // Afficher via image de fond sur le wrap (fiable mobile/desktop)
+  const wrapId = canvasId === 'canvas-sig-formateur' ? 'wrap-sig-formateur' : 'wrap-sig-cachet';
+  const wrap = document.getElementById(wrapId);
+  if (wrap) {
+    wrap.style.backgroundImage = 'url(' + dataURL + ')';
+    wrap.style.backgroundSize = 'contain';
+    wrap.style.backgroundRepeat = 'no-repeat';
+    wrap.style.backgroundPosition = 'center';
+  }
+  // Hint discret
+  const hintId = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
+  const h = document.getElementById(hintId);
+  if (h) { h.textContent = '✎ modifier'; h.classList.add('has-sig'); }
 }
 
 // ===== CANVAS STAGIAIRE =====
@@ -1046,19 +1051,14 @@ window.validerModaleSign = async function() {
   tmp.getContext('2d').drawImage(_modaleCanvas, 0, 0, _modaleCanvas.width, _modaleCanvas.height, 0, 0, w, h);
   const data = tmp.toDataURL('image/png');
 
-  // Copier dans le petit canvas de la page (affichage résumé)
-  const smallCanvas = document.getElementById(_modaleTargetCanvasId);
-  if (smallCanvas) {
-    // Reinit si besoin
-    if (!smallCanvas._init) initCanvasFormateur(_modaleTargetCanvasId);
-    const ctx2 = smallCanvas.getContext('2d');
-    ctx2.clearRect(0, 0, smallCanvas.width, smallCanvas.height);
-    const img2 = new Image();
-    img2.onload = () => ctx2.drawImage(img2, 0, 0, smallCanvas.offsetWidth * (window.devicePixelRatio||1), smallCanvas.offsetHeight * (window.devicePixelRatio||1));
-    img2.src = data;
-    const hintId = _modaleTargetCanvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
-    const h2 = document.getElementById(hintId);
-    if (h2) h2.style.display = 'none';
+  // Afficher la signature dans la petite zone via image de fond (fiable sur tous mobiles)
+  const wrapId = _modaleTargetCanvasId === 'canvas-sig-formateur' ? 'wrap-sig-formateur' : 'wrap-sig-cachet';
+  const wrap = document.getElementById(wrapId);
+  if (wrap) {
+    wrap.style.backgroundImage = 'url(' + data + ')';
+    wrap.style.backgroundSize = 'contain';
+    wrap.style.backgroundRepeat = 'no-repeat';
+    wrap.style.backgroundPosition = 'center';
   }
 
   // Sauvegarder via la fonction existante (Firebase + variables)
