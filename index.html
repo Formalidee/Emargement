@@ -72,6 +72,7 @@ input.f:focus,select.f:focus{outline:none;border-color:#1a56db;background:#fff;}
 .sig-canvas-wrap{border:2px solid #1a56db;border-radius:8px;background:#fafcff;position:relative;overflow:hidden;height:80px;}
 .sig-canvas-wrap canvas{display:block;width:100%;height:80px;cursor:pointer;touch-action:auto;border-radius:6px;pointer-events:none;}
 .sig-hint{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#1a56db;pointer-events:none;white-space:nowrap;font-weight:bold;letter-spacing:0.3px;}
+.sig-hint.has-sig{top:auto;bottom:3px;left:0;right:0;font-size:9px;color:rgba(26,86,219,0.5);font-weight:normal;justify-content:flex-end;padding-right:6px;}
 .sig-label{font-size:11px;color:#888;margin-bottom:4px;font-style:italic;text-decoration:underline;}
 .btn-eff-sm{font-size:10px;color:#1a56db;background:none;border:none;cursor:pointer;margin-top:3px;font-family:Arial;padding:0;}
 .stag-page{max-width:480px;margin:0 auto;padding:1rem;min-height:100vh;background:#f0f2f5;}
@@ -744,6 +745,10 @@ window.clearCanvasFormateur = async function(canvasId, hintId) {
   const okId = canvasId === 'canvas-sig-formateur' ? 'ok-sig-formateur' : 'ok-sig-cachet';
   const okEl = document.getElementById(okId);
   if (okEl) okEl.style.display = 'none';
+  // Remettre le hint en mode normal
+  const hintIdClear = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
+  const hClear = document.getElementById(hintIdClear);
+  if (hClear) { hClear.textContent = '\uD83D\uDCDD Tapez pour signer'; hClear.classList.remove('has-sig'); }
   if (canvasId === 'canvas-sig-formateur') {
     sigFormateurData = '';
     if (sessionId) await update(ref(db), { ['sessions/' + sessionId + '/sigFormateur']: '' });
@@ -777,7 +782,7 @@ function restaurerCanvasFormateur(canvasId, dataURL) {
     // Changer le hint pour indiquer qu'on peut modifier
     const hintId = canvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
     const h = document.getElementById(hintId);
-    if (h) h.textContent = '✎ Modifier la signature';
+    if (h) { h.textContent = '✎ modifier'; h.classList.add('has-sig'); }
   };
   img.src = dataURL;
 }
@@ -1079,6 +1084,11 @@ window.validerModaleSign = async function() {
       await update(ref(db), upd);
     }
   }
+
+  // Passer le hint en mode "modifier" (petit, discret, laisse voir la signature)
+  const hintIdModal = _modaleTargetCanvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
+  const hModal = document.getElementById(hintIdModal);
+  if (hModal) { hModal.textContent = '✎ modifier'; hModal.classList.add('has-sig'); }
 
   // Fermer la modale
   document.getElementById('sig-modal-overlay').classList.remove('open');
