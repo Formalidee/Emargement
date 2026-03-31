@@ -98,6 +98,18 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
 .spage-ok{display:none;text-align:center;padding:4rem 1rem;background:#f0f2f5;min-height:100vh;}
 .spage-err{text-align:center;padding:3rem 1rem;background:#f0f2f5;min-height:100vh;display:none;}
 .btn-orange{width:100%;padding:12px;border:none;border-radius:10px;background:#f59e0b;color:#fff;font-size:14px;font-weight:bold;cursor:pointer;font-family:Arial;margin-top:8px;display:none;}
+.sig-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;flex-direction:column;align-items:stretch;justify-content:flex-end;}
+.sig-modal-overlay.open{display:flex;}
+.sig-modal-box{background:#fff;border-radius:16px 16px 0 0;padding:1rem 1rem 1.5rem;display:flex;flex-direction:column;gap:10px;max-height:92vh;}
+.sig-modal-header{display:flex;justify-content:space-between;align-items:center;}
+.sig-modal-title{font-size:14px;font-weight:bold;color:#1a3a6b;}
+.sig-modal-close{background:none;border:none;font-size:22px;color:#888;cursor:pointer;line-height:1;padding:0 4px;}
+.sig-modal-canvas-wrap{border:2px solid #1a56db;border-radius:10px;background:#fafcff;position:relative;flex:1;min-height:200px;max-height:55vh;}
+.sig-modal-canvas-wrap canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none;border-radius:8px;}
+.sig-modal-hint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:13px;color:#b0c4de;pointer-events:none;white-space:nowrap;}
+.sig-modal-actions{display:flex;gap:8px;}
+.sig-modal-btn-eff{flex:1;padding:11px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:13px;cursor:pointer;font-family:Arial;color:#555;}
+.sig-modal-btn-val{flex:2;padding:11px;border:none;border-radius:8px;background:#1a56db;color:#fff;font-size:13px;font-weight:bold;cursor:pointer;font-family:Arial;}
 @media screen{#print-view{display:none;}}
 @media print{
   body>*:not(#print-view){display:none!important;}
@@ -216,9 +228,9 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
       <div class="sig-formateur-grid">
         <div>
           <div class="sig-label">Signature de l'intervenant</div>
-          <div class="sig-canvas-wrap" id="wrap-sig-formateur">
+          <div class="sig-canvas-wrap" id="wrap-sig-formateur" onclick="ouvrirModaleSign('canvas-sig-formateur')" title="Cliquez pour agrandir" style="cursor:pointer;">
             <canvas id="canvas-sig-formateur"></canvas>
-            <div class="sig-hint" id="hint-sig-formateur">Signez ici avec le doigt ou la souris</div>
+            <div class="sig-hint" id="hint-sig-formateur">&#x1F4DD; Tapez pour signer</div>
           </div>
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn-eff-sm" onclick="clearCanvasFormateur('canvas-sig-formateur','hint-sig-formateur')">Effacer</button>
@@ -228,9 +240,9 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
         </div>
         <div>
           <div class="sig-label">Signature &amp; cachet du signataire</div>
-          <div class="sig-canvas-wrap" id="wrap-sig-cachet">
+          <div class="sig-canvas-wrap" id="wrap-sig-cachet" onclick="ouvrirModaleSign('canvas-sig-cachet')" title="Cliquez pour agrandir" style="cursor:pointer;">
             <canvas id="canvas-sig-cachet"></canvas>
-            <div class="sig-hint" id="hint-sig-cachet">Signez ici avec le doigt ou la souris</div>
+            <div class="sig-hint" id="hint-sig-cachet">&#x1F4DD; Tapez pour signer</div>
           </div>
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn-eff-sm" onclick="clearCanvasFormateur('canvas-sig-cachet','hint-sig-cachet')">Effacer</button>
@@ -284,6 +296,24 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
   </div>
   <div class="spage-ok" id="stag-ok"><div style="font-size:64px;margin-bottom:1rem;">OK</div><div style="font-size:22px;font-weight:bold;color:#1a6b35;margin-bottom:8px;">Signatures enregistrees !</div><div style="font-size:14px;color:#888;">Merci, vous pouvez fermer cette page.</div></div>
   <div class="spage-err" id="stag-err"><div style="font-size:48px;margin-bottom:1rem;">!</div><div style="font-size:18px;font-weight:bold;color:#c0392b;margin-bottom:8px;">Session introuvable</div><div style="font-size:13px;color:#888;">Demandez un nouveau QR code a votre formateur.</div></div>
+</div>
+
+<!-- MODALE SIGNATURE FORMATEUR -->
+<div class="sig-modal-overlay" id="sig-modal-overlay" onclick="fermerModaleSign(event)">
+  <div class="sig-modal-box" onclick="event.stopPropagation()">
+    <div class="sig-modal-header">
+      <span class="sig-modal-title" id="sig-modal-title">Signature</span>
+      <button class="sig-modal-close" onclick="fermerModaleSign()">&#10005;</button>
+    </div>
+    <div class="sig-modal-canvas-wrap" id="sig-modal-wrap">
+      <canvas id="sig-modal-canvas"></canvas>
+      <div class="sig-modal-hint" id="sig-modal-hint">Signez ici avec le doigt ou la souris</div>
+    </div>
+    <div class="sig-modal-actions">
+      <button class="sig-modal-btn-eff" onclick="effacerModaleSign()">Effacer</button>
+      <button class="sig-modal-btn-val" onclick="validerModaleSign()">Valider &#10003;</button>
+    </div>
+  </div>
 </div>
 
 <!-- PRINT VIEW -->
@@ -899,6 +929,165 @@ async function init() {
     document.getElementById('stag-err').style.display = 'block';
   }
 }
+
+// ===== MODALE SIGNATURE FORMATEUR =====
+let _modaleTargetCanvasId = null;
+let _modaleDrawing = false;
+let _modaleLx = 0, _modaleLy = 0;
+let _modaleCtx = null;
+let _modaleCanvas = null;
+let _modaleInited = false;
+
+window.ouvrirModaleSign = function(targetCanvasId) {
+  _modaleTargetCanvasId = targetCanvasId;
+  const label = targetCanvasId === 'canvas-sig-formateur' ? "Signature de l\u2019intervenant" : 'Signature & cachet du signataire';
+  document.getElementById('sig-modal-title').textContent = label;
+
+  const overlay = document.getElementById('sig-modal-overlay');
+  overlay.classList.add('open');
+
+  // Init canvas modale (une seule fois, mais on redimensionne a chaque ouverture)
+  _modaleCanvas = document.getElementById('sig-modal-canvas');
+  const wrap = document.getElementById('sig-modal-wrap');
+
+  // Attendre le rendu pour avoir les bonnes dimensions
+  requestAnimationFrame(() => {
+    const dpr = window.devicePixelRatio || 1;
+    const w = wrap.offsetWidth  || 300;
+    const h = wrap.offsetHeight || 220;
+    _modaleCanvas.width  = Math.round(w * dpr);
+    _modaleCanvas.height = Math.round(h * dpr);
+    _modaleCanvas.style.width  = w + 'px';
+    _modaleCanvas.style.height = h + 'px';
+    _modaleCtx = _modaleCanvas.getContext('2d');
+    _modaleCtx.scale(dpr, dpr);
+    _modaleCtx.strokeStyle = '#111';
+    _modaleCtx.lineWidth = 2.5;
+    _modaleCtx.lineCap = 'round';
+    _modaleCtx.lineJoin = 'round';
+
+    // Si une signature existe deja, la pre-afficher dans la modale
+    const existingData = targetCanvasId === 'canvas-sig-formateur' ? sigFormateurData : sigCachetData;
+    if (existingData) {
+      const img = new Image();
+      img.onload = () => {
+        _modaleCtx.drawImage(img, 0, 0, w, h);
+        document.getElementById('sig-modal-hint').style.display = 'none';
+      };
+      img.src = existingData;
+    } else {
+      document.getElementById('sig-modal-hint').style.display = 'block';
+    }
+
+    if (!_modaleInited) {
+      _modaleInited = true;
+      function mPos(e) {
+        const r = _modaleCanvas.getBoundingClientRect();
+        const s = e.touches ? e.touches[0] : e;
+        return [s.clientX - r.left, s.clientY - r.top];
+      }
+      function mStart(e) {
+        _modaleDrawing = true;
+        const p = mPos(e); _modaleLx = p[0]; _modaleLy = p[1];
+        document.getElementById('sig-modal-hint').style.display = 'none';
+      }
+      function mMove(e) {
+        if (!_modaleDrawing) return;
+        const p = mPos(e);
+        _modaleCtx.beginPath();
+        _modaleCtx.moveTo(_modaleLx, _modaleLy);
+        _modaleCtx.lineTo(p[0], p[1]);
+        _modaleCtx.stroke();
+        _modaleLx = p[0]; _modaleLy = p[1];
+      }
+      function mStop() { _modaleDrawing = false; }
+      _modaleCanvas.addEventListener('mousedown', mStart);
+      _modaleCanvas.addEventListener('mousemove', mMove);
+      _modaleCanvas.addEventListener('mouseup', mStop);
+      _modaleCanvas.addEventListener('mouseleave', mStop);
+      _modaleCanvas.addEventListener('touchstart', e => { e.preventDefault(); mStart(e); }, { passive: false });
+      _modaleCanvas.addEventListener('touchmove',  e => { e.preventDefault(); mMove(e);  }, { passive: false });
+      _modaleCanvas.addEventListener('touchend',   mStop);
+    }
+  });
+};
+
+window.fermerModaleSign = function(e) {
+  if (e && e.target !== document.getElementById('sig-modal-overlay')) return;
+  document.getElementById('sig-modal-overlay').classList.remove('open');
+  _modaleTargetCanvasId = null;
+  _modaleDrawing = false;
+  _modaleInited = false; // forcer reinit dimensions a la prochaine ouverture
+};
+
+window.effacerModaleSign = function() {
+  if (!_modaleCtx || !_modaleCanvas) return;
+  _modaleCtx.clearRect(0, 0, _modaleCanvas.width, _modaleCanvas.height);
+  document.getElementById('sig-modal-hint').style.display = 'block';
+};
+
+window.validerModaleSign = async function() {
+  if (!_modaleCanvas || !_modaleTargetCanvasId) return;
+
+  // Verifier qu'il y a un contenu
+  const px = _modaleCtx.getImageData(0, 0, _modaleCanvas.width, _modaleCanvas.height).data;
+  let hasContent = false;
+  for (let i = 3; i < px.length; i += 4) { if (px[i] > 10) { hasContent = true; break; } }
+  if (!hasContent) { alert('Veuillez tracer votre signature avant de valider.'); return; }
+
+  // Extraire l'image de la modale
+  const w = _modaleCanvas.offsetWidth  || 300;
+  const h = _modaleCanvas.offsetHeight || 220;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  tmp.getContext('2d').drawImage(_modaleCanvas, 0, 0, _modaleCanvas.width, _modaleCanvas.height, 0, 0, w, h);
+  const data = tmp.toDataURL('image/png');
+
+  // Copier dans le petit canvas de la page (affichage résumé)
+  const smallCanvas = document.getElementById(_modaleTargetCanvasId);
+  if (smallCanvas) {
+    // Reinit si besoin
+    if (!smallCanvas._init) initCanvasFormateur(_modaleTargetCanvasId);
+    const ctx2 = smallCanvas.getContext('2d');
+    ctx2.clearRect(0, 0, smallCanvas.width, smallCanvas.height);
+    const img2 = new Image();
+    img2.onload = () => ctx2.drawImage(img2, 0, 0, smallCanvas.offsetWidth * (window.devicePixelRatio||1), smallCanvas.offsetHeight * (window.devicePixelRatio||1));
+    img2.src = data;
+    const hintId = _modaleTargetCanvasId === 'canvas-sig-formateur' ? 'hint-sig-formateur' : 'hint-sig-cachet';
+    const h2 = document.getElementById(hintId);
+    if (h2) h2.style.display = 'none';
+  }
+
+  // Sauvegarder via la fonction existante (Firebase + variables)
+  const qualite = document.getElementById('input-qualite') ? document.getElementById('input-qualite').value.trim() : '';
+  if (_modaleTargetCanvasId === 'canvas-sig-formateur') {
+    sigFormateurData = data;
+    const okEl = document.getElementById('ok-sig-formateur');
+    if (okEl) okEl.style.display = 'block';
+    if (sessionId) {
+      const upd = {};
+      upd['sessions/' + sessionId + '/sigFormateur'] = data;
+      upd['sessions/' + sessionId + '/qualiteSignataire'] = qualite;
+      await update(ref(db), upd);
+    }
+  } else {
+    sigCachetData = data;
+    const okEl = document.getElementById('ok-sig-cachet');
+    if (okEl) okEl.style.display = 'block';
+    if (sessionId) {
+      const upd = {};
+      upd['sessions/' + sessionId + '/sigCachet'] = data;
+      upd['sessions/' + sessionId + '/qualiteSignataire'] = qualite;
+      await update(ref(db), upd);
+    }
+  }
+
+  // Fermer la modale
+  document.getElementById('sig-modal-overlay').classList.remove('open');
+  _modaleTargetCanvasId = null;
+  _modaleDrawing = false;
+  _modaleInited = false;
+};
 
 init();
 </script>
