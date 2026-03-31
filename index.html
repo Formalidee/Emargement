@@ -228,7 +228,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
       <div class="sig-formateur-grid">
         <div>
           <div class="sig-label">Signature de l'intervenant</div>
-          <div class="sig-canvas-wrap" id="wrap-sig-formateur" onclick="ouvrirModaleSign('canvas-sig-formateur')" title="Cliquez pour agrandir" style="cursor:pointer;">
+          <div class="sig-canvas-wrap" id="wrap-sig-formateur" onclick="ouvrirModaleSign('canvas-sig-formateur')" ontouchstart="" title="Tapez pour signer" style="cursor:pointer;-webkit-tap-highlight-color:rgba(26,86,219,0.15);">
             <canvas id="canvas-sig-formateur"></canvas>
             <div class="sig-hint" id="hint-sig-formateur">&#x1F4DD; Tapez pour signer</div>
           </div>
@@ -240,7 +240,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
         </div>
         <div>
           <div class="sig-label">Signature &amp; cachet du signataire</div>
-          <div class="sig-canvas-wrap" id="wrap-sig-cachet" onclick="ouvrirModaleSign('canvas-sig-cachet')" title="Cliquez pour agrandir" style="cursor:pointer;">
+          <div class="sig-canvas-wrap" id="wrap-sig-cachet" onclick="ouvrirModaleSign('canvas-sig-cachet')" ontouchstart="" title="Tapez pour signer" style="cursor:pointer;-webkit-tap-highlight-color:rgba(26,86,219,0.15);">
             <canvas id="canvas-sig-cachet"></canvas>
             <div class="sig-hint" id="hint-sig-cachet">&#x1F4DD; Tapez pour signer</div>
           </div>
