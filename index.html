@@ -228,7 +228,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
       <div class="sig-formateur-grid">
         <div>
           <div class="sig-label">Signature de l'intervenant</div>
-          <div class="sig-canvas-wrap" id="wrap-sig-formateur" onclick="ouvrirModaleSign('canvas-sig-formateur')" ontouchstart="" title="Tapez pour signer" style="cursor:pointer;-webkit-tap-highlight-color:rgba(26,86,219,0.15);">
+          <div class="sig-canvas-wrap" id="wrap-sig-formateur" title="Tapez pour signer" style="cursor:pointer;">
             <canvas id="canvas-sig-formateur"></canvas>
             <div class="sig-hint" id="hint-sig-formateur">&#x1F4DD; Tapez pour signer</div>
           </div>
@@ -240,7 +240,7 @@ canvas.sig-c{display:block;width:100%;height:150px;cursor:crosshair;touch-action
         </div>
         <div>
           <div class="sig-label">Signature &amp; cachet du signataire</div>
-          <div class="sig-canvas-wrap" id="wrap-sig-cachet" onclick="ouvrirModaleSign('canvas-sig-cachet')" ontouchstart="" title="Tapez pour signer" style="cursor:pointer;-webkit-tap-highlight-color:rgba(26,86,219,0.15);">
+          <div class="sig-canvas-wrap" id="wrap-sig-cachet" title="Tapez pour signer" style="cursor:pointer;">
             <canvas id="canvas-sig-cachet"></canvas>
             <div class="sig-hint" id="hint-sig-cachet">&#x1F4DD; Tapez pour signer</div>
           </div>
@@ -1088,6 +1088,23 @@ window.validerModaleSign = async function() {
   _modaleDrawing = false;
   _modaleInited = false;
 };
+
+// Attacher ouverture modale via touch ET click (fiable mobile)
+(function() {
+  function attachModale(wrapId, canvasId) {
+    const el = document.getElementById(wrapId);
+    if (!el) return;
+    let touchMoved = false;
+    el.addEventListener('touchstart', function(e) { touchMoved = false; }, { passive: true });
+    el.addEventListener('touchmove',  function(e) { touchMoved = true;  }, { passive: true });
+    el.addEventListener('touchend',   function(e) {
+      if (!touchMoved) { e.preventDefault(); ouvrirModaleSign(canvasId); }
+    }, { passive: false });
+    el.addEventListener('click', function(e) { ouvrirModaleSign(canvasId); });
+  }
+  attachModale('wrap-sig-formateur', 'canvas-sig-formateur');
+  attachModale('wrap-sig-cachet',    'canvas-sig-cachet');
+})();
 
 init();
 </script>
