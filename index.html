@@ -525,11 +525,37 @@ window.ouvrirSession = async function(id) {
   const snap = await get(ref(db, 'sessions/' + id));
   if (!snap.exists()) return;
   sessionData = snap.val();
-  document.getElementById('topbar-badge').textContent = sessionData.intitule + ' — ' + sessionData.formateur;
+  document.getElementById('topbar-badge').textContent = sessionData.intitule + ' \u2014 ' + sessionData.formateur;
   document.getElementById('f-intitule').textContent = sessionData.intitule;
-  document.getElementById('f-details').textContent = sessionData.formateur + (sessionData.client ? ' · ' + sessionData.client : '') + ' · ' + fmtDate(sessionData.date);
+  document.getElementById('f-details').textContent = sessionData.formateur + (sessionData.client ? ' \u00b7 ' + sessionData.client : '') + ' \u00b7 ' + fmtDate(sessionData.date);
   document.getElementById('count-form').textContent = sessionData.formateur.split(' ')[0];
-  // Recuperer les signatures formateur persistees dans Firebase
+
+  // === REINITIALISATION COMPLETE AVANT CHARGEMENT ===
+  // Vider les variables JS (evite contamination entre sessions)
+  sigFormateurData = '';
+  sigCachetData = '';
+  _modaleInited = false;
+
+  // Vider l'affichage visuel des wraps
+  ['wrap-sig-formateur','wrap-sig-cachet'].forEach(wid => {
+    const w = document.getElementById(wid);
+    if (w) { w.style.backgroundImage = 'none'; }
+  });
+  // Remettre les hints en etat initial
+  ['hint-sig-formateur','hint-sig-cachet'].forEach(hid => {
+    const h = document.getElementById(hid);
+    if (h) { h.textContent = '\uD83D\uDCDD Tapez pour signer'; h.classList.remove('has-sig'); h.style.display = 'flex'; }
+  });
+  // Masquer les indicateurs "Signature enregistree"
+  ['ok-sig-formateur','ok-sig-cachet'].forEach(oid => {
+    const o = document.getElementById(oid);
+    if (o) o.style.display = 'none';
+  });
+  // Vider le champ qualite
+  const inputQualite = document.getElementById('input-qualite');
+  if (inputQualite) inputQualite.value = '';
+
+  // === CHARGER LES DONNEES DE CETTE SESSION DEPUIS FIREBASE ===
   sigFormateurData = sessionData.sigFormateur || '';
   sigCachetData    = sessionData.sigCachet    || '';
   const qualiteSauvegardee = sessionData.qualiteSignataire || '';
@@ -541,12 +567,11 @@ window.ouvrirSession = async function(id) {
   if (okCachet) okCachet.style.display = sigCachetData    ? 'block' : 'none';
 
   // Champ qualite
-  const inputQualite = document.getElementById('input-qualite');
   if (inputQualite) inputQualite.value = qualiteSauvegardee;
 
   // Reinitialiser les canvas (forcer reinit)
   ['canvas-sig-formateur','canvas-sig-cachet'].forEach(cid => {
-    const c = document.getElementById(cid); if (c) c._init = false;
+    const c = document.getElementById(cid); if (c) { c._init = false; c.getContext('2d').clearRect(0,0,c.width,c.height); }
   });
 
   generateQR(id);
